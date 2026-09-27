@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Research Agent | Evidence to insight</title>
+  <meta name="description" content="Local financial research with task-aware tools, persistent memory, and traceable decisions.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/presentation.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero interview-hero">
+      <div class="hero-copy">
+        <div>
+          <p class="eyebrow">Market Research Agent / Local intelligence</p>
+          <h1>One question.<br><em>A traceable answer.</em></h1>
+          <p class="hero-text">Chooses relevant tools, recalls prior evidence, and checks its conclusions. Follow the decisions behind every report.</p>
+          <div class="hero-badges"><span>Task-aware tools</span><span>Persistent RAG</span><span>Bounded feedback loop</span></div>
+        </div>
+        <ol class="story-steps" aria-label="Four research stages">
+          <li><span>01</span><div><strong>Plan</strong><small>Understand the question. Select the tools.</small></div></li>
+          <li><span>02</span><div><strong>Research</strong><small>Collect evidence. Recall prior news.</small></div></li>
+          <li><span>03</span><div><strong>Analyze</strong><small>Calculate signals. Build a thesis.</small></div></li>
+          <li><span>04</span><div><strong>Verify</strong><small>Check support. Retry if needed.</small></div></li>
+        </ol>
+      </div>
+    </header>
+    <main class="workspace">
+      <section class="panel input-panel">
+        <div class="panel-heading"><div><p class="section-label">01 / Ask</p><h2>What would you like to investigate?</h2></div></div>
+        <div class="demo-requests" aria-label="Example research tasks">
+          <button type="button" class="demo-request is-active" data-demo="technical" aria-pressed="true"><span>01 / Technical</span><strong>Apple price &amp; risk</strong><small>Show focused tool selection</small></button>
+          <button type="button" class="demo-request" data-demo="earnings" aria-pressed="false"><span>02 / Fundamentals</span><strong>Apple earnings &amp; outlook</strong><small>Connect filings, news &amp; memory</small></button>
+          <button type="button" class="demo-request" data-demo="probability" aria-pressed="false"><span>03 / Expectations</span><strong>Bitcoin market odds</strong><small>Inspect prediction-market evidence</small></button>
+        </div>
+        <p class="field-hint">Examples fill the form. Research starts only when you click Run.</p>
+        <form id="analysisForm" class="analysis-form">
+          <label class="field"><span>Company name or symbol</span><input id="asset" name="asset" type="text" value="AAPL" placeholder="Apple, AAPL, Google, BTC" autocomplete="off" required><small id="assetNameHint" class="asset-name-hint">Resolving Apple...</small></label>
+          <div class="favorite-assets" aria-label="Quick pick assets">
+            <button class="favorite-asset-button" type="button" data-asset="BTC">Bitcoin</button>
+            <button class="favorite-asset-button is-active" type="button" data-asset="AAPL">Apple</button>
+            <button class="favorite-asset-button" type="button" data-asset="GOOGL">Google</button>
+            <button class="favorite-asset-button" type="button" data-asset="TSLA">Tesla</button>
+          </div>
+          <div class="field-grid price-grid">
+            <div class="field"><span>Latest quote</span><div id="currentPriceDisplay" class="price-display is-loading" aria-live="polite"><strong>Fetching quote...</strong><small>Yahoo Finance</small></div></div>
+            <label class="field target-field"><span>Target price <small>optional</small></span><input id="targetPrice" name="targetPrice" type="text" inputmode="decimal" placeholder="e.g. 120000"><small class="field-hint">Adds target-distance analysis and relevant Polymarket price markets.</small></label>
+          </div>
+          <label class="field"><span>Target condition</span><select id="targetCondition"><option value="auto">Infer from question (default: at or above)</option><option value="above">At or above target</option><option value="below">At or below target</option></select><small class="field-hint">Current threshold satisfaction is not a guarantee of a future closing price.</small></label>
+          <label class="field question-field"><span>Your question</span><textarea id="query" name="query" rows="3" required>Show Apple's six month price trend, volatility, and maximum drawdown.</textarea></label>
+          <p id="predictionProviderHint" class="field-hint">Prediction data: CoinRithm aggregation, original venue Polymarket. This is not Gamma direct data.</p>
+          <details class="advanced-context settings-details">
+            <summary>Model, horizon &amp; advanced options</summary>
+            <div class="advanced-context-body">
+              <div class="field-grid request-grid">
+                <label class="field"><span>Model</span><select id="llmModel" name="llmModel"><option value="auto">Auto detect</option></select></label>
+                <label class="field"><span>Prediction data provider</span><select id="predictionProvider" name="predictionProvider"><option value="coinrithm" selected>CoinRithm aggregation (Polymarket venue)</option><option value="gamma">Gamma official direct</option></select><small class="field-hint">One provider per run. Access denial never triggers an automatic switch.</small></label>
+                <label class="field"><span>Analysis horizon</span><select id="horizon" name="horizon"><option value="" selected>Let the agent infer</option><option value="1 day">1 day</option><option value="1 week">1 week</option><option value="1-3 months">1-3 months</option><option value="1 quarter">1 quarter</option><option value="1 year">1 year</option></select></label>
+                <label class="field"><span>Evidence retries</span><select id="maxRetries" name="maxRetries"><option value="1" selected>1 targeted retry</option><option value="2">2 targeted retries</option><option value="3">3 targeted retries</option></select></label>
+                <label class="field"><span>Reasoning temperature</span><div class="temperature-inline"><input id="temperatureSlider" type="range" min="0" max="60" step="5" value="15"><strong id="temperatureValue">0.15</strong></div></label>
+              </div>
+              <label class="field"><span>Market notes</span><textarea id="notes" name="notes" rows="2" placeholder="Optional context, labeled separately from retrieved evidence."></textarea></label>
+              <label class="field"><span>Headlines or research bullets</span><textarea id="headlines" name="headlines" rows="2" placeholder="Optional, one item per line."></textarea></label>
+              <details class="api-diagnostic">
+                <summary>Prediction data connection diagnostics</summary>
+                <div class="api-diagnostic-meta"><code id="polyApiBase">CoinRithm aggregation</code><span id="polyStatusDot" class="runtime-dot" aria-hidden="true"></span><button id="refreshPolymarketButton" class="ghost-button compact" type="button">Check selected provider</button><button id="checkGammaButton" class="ghost-button compact" type="button">Check Gamma separately</button></div>
+                <p id="polyApiStatus" class="fetch-status">Not checked. Run a connection check when needed; it does not start research.</p>
+                <div id="polyApiProbes" class="api-probe-list"></div>
+              </details>
+            </div>
+          </details>
+          <div class="form-actions"><button id="analyzeButton" class="primary-button" type="submit"><span class="button-label">Run autonomous analysis</span></button><div class="model-readiness"><span id="ollamaDot" class="runtime-dot" aria-hidden="true"></span><span id="llmStatus" class="fetch-status">Checking local Ollama...</span></div></div>
+        </form>
+      </section>
+
+      <section class="replay-panel" aria-label="Saved report replay">
+        <div><p class="section-label">Saved evidence</p><strong>Replay a previous run</strong><p id="historyStatus" class="field-hint" role="status">Loading saved reports...</p></div>
+        <div class="replay-actions"><select id="savedRunSelect" aria-label="Saved reports"><option value="">Loading...</option></select><button id="replayButton" class="secondary-button" type="button" disabled>Replay</button><button id="refreshHistoryButton" class="ghost-button compact" type="button">Refresh list</button></div>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="panel-heading"><div><p class="section-label">02 / Inspect</p><h2>The answer, with its evidence.</h2></div><span id="statusPill" class="status-pill neutral">Waiting for input</span></div>
+        <div id="resultEmpty" class="result-empty"><p>Choose an example or ask your own question. Decisions, tool calls, and evidence will appear here.</p></div>
+        <div id="resultContent" class="result-content hidden">
+          <div id="analysisStateBanner" class="analysis-state-banner idle" role="status">Waiting for a fresh run.</div>
+          <section id="runProgress" class="run-progress hidden" aria-live="polite">
+            <div class="running-mark"><span class="agent-spinner" aria-hidden="true"></span><div><strong id="runningTitle">Agent is working</strong><p id="runningMessage">Understanding your question...</p></div><span id="runElapsed" class="elapsed-label">0s elapsed</span></div>
+            <div id="stageTimeline" class="stage-timeline"></div>
+            <div id="liveSourceStatus" class="live-source-status"></div>
+            <div class="live-audit-grid"><div><span class="live-audit-label">Latest decision</span><div id="liveDecisionAudit" class="live-audit-output">Waiting for the first node...</div></div><div><span class="live-audit-label">Tools called so far</span><div id="liveToolCalls" class="live-tool-list"><span>None yet</span></div></div></div>
+            <details class="technical-progress"><summary>Inspect the nine LangGraph nodes</summary><div id="nodeTimeline" class="node-timeline"></div></details>
+          </section>
+
+          <div id="reportContent" class="report-content hidden">
+            <div class="report-toolbar"><p id="reportProvenance" class="field-hint"></p><div><button id="exportReportButton" class="ghost-button compact" type="button">Export report JSON</button><button id="resetButton" class="ghost-button compact" type="button">Clear view</button></div></div>
+            <article class="market-summary-card company-report-card">
+              <div class="company-report-hero"><div class="company-identity"><span id="summaryAssetMark" class="company-mark" aria-hidden="true">--</span><div class="company-copy"><p class="summary-label">Research snapshot</p><div class="company-title-row"><h3 id="summaryAsset">--</h3><span id="summarySymbol" class="symbol-chip">--</span></div><p id="currentView" class="company-view">--</p></div></div><span id="qualityBadge" class="market-summary-mood mixed">--</span></div>
+              <div class="company-market-strip"><div class="company-price-block"><p class="summary-label">Price at analysis</p><strong id="summaryPrice">--</strong><span id="summaryMove" class="company-move">--</span></div><div class="company-fact"><p class="summary-label">Agent task</p><strong id="summaryTask">--</strong></div><div class="company-fact"><p class="summary-label">Horizon</p><strong id="summaryHorizon">--</strong></div><div class="company-fact"><p class="summary-label">Selected model</p><strong id="summaryModel">--</strong></div><div class="company-fact"><p class="summary-label">Quote timestamp</p><strong id="summaryAsOf">--</strong></div></div>
+              <div class="request-understanding-card"><span>Request understood</span><strong id="understoodRequest">--</strong><p id="understandingMode">--</p></div>
+            </article>
+
+            <section class="execution-brief" aria-label="Agent execution summary">
+              <div class="subsection-heading"><p class="section-label">Visible autonomy</p><h3>What the agent actually did</h3></div>
+              <div id="executionMetrics" class="execution-metrics"></div>
+              <p id="decisionHighlight" class="decision-highlight"></p>
+              <div id="actualTools" class="actual-tools"></div>
+              <div id="polymarketRunStatus" class="polymarket-run-status" role="status"></div>
+              <p id="verificationNotice" class="verification-notice"></p>
+            </section>
+            <article class="narrative-card"><p class="reason-title">Why this view</p><ul id="whyList" class="clean-list"></ul><p class="future-label">What to watch next</p><p id="futureExpectation" class="future-copy"></p></article>
+            <section><div class="subsection-heading"><p class="section-label">Calculated in Python</p><h3>Market &amp; financial signals</h3></div><div id="signalGrid" class="signal-grid"></div></section>
+            <section><div class="subsection-heading"><p class="section-label">Evidence diagnostics</p><h3>How well is this answer supported?</h3></div><p class="field-hint">Rule-based indicators of evidence and references. These scores have not been calibrated as prediction accuracy or investment success probabilities.</p><div id="scoreGrid" class="score-grid"></div></section>
+
+            <details class="report-details"><summary>Upside, downside &amp; invalidation conditions</summary><div class="detail-body explanation-grid thesis-grid"><article class="reason-card bullish thesis-card"><div class="thesis-title-row"><p class="reason-title">Upside thesis</p><span class="branch-tag upside">UPSIDE</span></div><p id="upsideScenario" class="scenario-copy"></p><div id="upsideChain" class="thesis-chain"></div><div id="upsideMeta" class="branch-meta"></div></article><article class="reason-card bearish thesis-card"><div class="thesis-title-row"><p class="reason-title">Downside thesis</p><span id="downsideStatus" class="branch-tag downside">--</span></div><p id="downsideScenario" class="scenario-copy"></p><div id="downsideChain" class="thesis-chain"></div><div id="downsideMeta" class="branch-meta"></div></article></div></details>
+            <details class="report-details"><summary>Evidence used: news, historical memory &amp; Polymarket</summary><div class="detail-body evidence-stack">
+              <article class="prompt-card"><div class="prompt-header"><p class="reason-title">News after filtering</p><span id="newsCount" class="count-chip">0</span></div><div id="filteredNews" class="evidence-stack"></div></article>
+              <article class="prompt-card"><div class="prompt-header"><p class="reason-title">Historical vector memory</p><span id="memoryCount" class="count-chip">0 / 3</span></div><div id="historyChunks" class="evidence-stack"></div></article>
+              <article class="prompt-card"><div class="prompt-header"><p class="reason-title">Ongoing Polymarket price markets</p><span id="polyCount" class="count-chip">0</span></div><div id="filteredPolymarket" class="evidence-stack"></div></article>
+            </div></details>
+            <details class="report-details"><summary>Tool selection: LLM proposals &amp; rule decisions</summary><div class="detail-body"><p class="detail-copy">This is the initial research plan. The actual call summary also includes any later targeted retrieval or memory writes.</p><div id="researchSourcePlan" class="source-plan-grid"></div></div></details>
+            <details class="report-details"><summary>Tools actually called: arguments &amp; results</summary><div id="toolCallAudit" class="detail-body tool-call-list"></div></details>
+            <details class="report-details agent-audit-details"><summary>Node decisions, rules &amp; feedback loops</summary><div class="detail-body"><p id="agentProofText" class="detail-copy"></p><div id="finalNodeTimeline" class="node-timeline final"></div><div id="decisionAudit" class="decision-audit-list"></div></div></details>
+            <details class="report-details"><summary>Intermediate state snapshots</summary><div class="detail-body"><p class="detail-copy">Persisted node inputs and outputs, including explicit decisions and rules.</p><div id="intermediateResults" class="intermediate-list"></div></div></details>
+            <details class="report-details"><summary>LLM calls: models, prompts &amp; fallbacks</summary><div class="detail-body"><p id="llmInputExplanation" class="detail-copy"></p><div id="llmCalls" class="llm-call-list"></div></div></details>
+            <details class="report-details"><summary>Source status &amp; all normalized evidence</summary><div class="detail-body"><div id="sourceStatusTable" class="source-status-table"></div><div id="allEvidence" class="evidence-stack"></div></div></details>
+            <article id="limitationsCard" class="prompt-card limitations-card"><p class="reason-title">Limitations &amp; conflicts</p><ul id="limitationsList" class="clean-list"></ul></article>
+          </div>
+        </div>
+      </section>
+    </main>
+    <details class="panel architecture-panel interview-architecture"><summary>Under the hood: the nine-node LangGraph workflow</summary><p class="support-text">The four stages group nine execution nodes. Evidence gaps return to targeted retrieval, with a shared retry budget. A completed report may still carry limitations.</p><div id="architectureFlow" class="architecture-flow" aria-label="Agent workflow"></div></details>
+    <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="130" y1="56" x2="1092" y2="604" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8F0"/>
+      <stop offset="0.55" stop-color="#F1E2CC"/>
+      <stop offset="1" stop-color="#F7F1E8"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="764" y1="86" x2="1078" y2="522" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A140E"/>
+      <stop offset="0.58" stop-color="#523719"/>
+      <stop offset="1" stop-color="#9A6830"/>
+    </linearGradient>
+    <linearGradient id="card" x1="808" y1="164" x2="1034" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="rgba(255,247,232,0.18)"/>
+      <stop offset="1" stop-color="rgba(255,247,232,0.08)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(971 138) rotate(90) scale(118)">
+      <stop stop-color="#FFD8A0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFD8A0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" rx="28" fill="url(#bg)"/>
+  <circle cx="1094" cy="560" r="156" fill="#C48A2E" fill-opacity="0.12"/>
+  <circle cx="1048" cy="116" r="124" fill="#C48A2E" fill-opacity="0.12"/>
+
+  <rect x="52" y="48" width="1096" height="534" rx="30" fill="#FFFBF6" fill-opacity="0.74" stroke="#1C1A17" stroke-opacity="0.08"/>
+
+  <text x="100" y="132" fill="#6D655B" font-family="Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="3">MARKET SIGNAL STUDIO</text>
+  <text x="100" y="230" fill="#1C1A17" font-family="Georgia, 'Times New Roman', serif" font-size="68" font-weight="400">
+    <tspan x="100" dy="0">Turn noisy market</tspan>
+    <tspan x="100" dy="76">context into a</tspan>
+    <tspan x="100" dy="76">confident trading</tspan>
+    <tspan x="100" dy="76">narrative.</tspan>
+  </text>
+
+  <text x="100" y="476" fill="#564D43" font-family="Arial, sans-serif" font-size="28" font-weight="500">
+    <tspan x="100" dy="0">Capture market emotion, probability signals, and live context in one place,</tspan>
+    <tspan x="100" dy="40">then use LLM-based reasoning to generate clearer trading narratives.</tspan>
+  </text>
+
+  <g>
+    <rect x="100" y="526" width="190" height="46" rx="23" fill="white" fill-opacity="0.84" stroke="#1C1A17" stroke-opacity="0.08"/>
+    <circle cx="130" cy="549" r="8" fill="#C48A2E"/>
+    <text x="150" y="556" fill="#1C1A17" font-family="Arial, sans-serif" font-size="22" font-weight="700">Probability signals</text>
+  </g>
+  <g>
+    <rect x="306" y="526" width="168" height="46" rx="23" fill="white" fill-opacity="0.84" stroke="#1C1A17" stroke-opacity="0.08"/>
+    <circle cx="336" cy="549" r="8" fill="#C48A2E"/>
+    <text x="356" y="556" fill="#1C1A17" font-family="Arial, sans-serif" font-size="22" font-weight="700">LLM narratives</text>
+  </g>
+  <g>
+    <rect x="490" y="526" width="196" height="46" rx="23" fill="white" fill-opacity="0.84" stroke="#1C1A17" stroke-opacity="0.08"/>
+    <circle cx="520" cy="549" r="8" fill="#C48A2E"/>
+    <text x="540" y="556" fill="#1C1A17" font-family="Arial, sans-serif" font-size="22" font-weight="700">Stocks, indices, cryptos</text>
+  </g>
+
+  <g>
+    <rect x="756" y="90" width="330" height="450" rx="28" fill="url(#panel)"/>
+    <circle cx="971" cy="138" r="118" fill="url(#glow)"/>
+    <circle cx="922" cy="308" r="150" stroke="rgba(255,244,230,0.28)" stroke-width="2"/>
+    <circle cx="922" cy="308" r="108" stroke="rgba(255,244,230,0.22)" stroke-width="2"/>
+    <rect x="784" y="156" width="274" height="356" rx="24" fill="white" fill-opacity="0.08" stroke="rgba(255,244,230,0.16)"/>
+    <text x="816" y="200" fill="rgba(255,244,230,0.72)" font-family="Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="2">LIVE BTC SNAPSHOT</text>
+    <text x="816" y="286" fill="#FFF8EE" font-family="Arial, sans-serif" font-size="68" font-weight="700">$ 84,512</text>
+    <text x="816" y="324" fill="rgba(255,244,230,0.74)" font-family="Arial, sans-serif" font-size="22">Updates every 5s</text>
+    <text x="816" y="382" fill="#FFF8EE" font-family="Arial, sans-serif" font-size="30" font-weight="700">Bitcoin</text>
+    <text x="816" y="434" fill="#FFF8EE" font-family="Arial, sans-serif" font-size="24">
+      <tspan x="816" dy="0">ETF flow, momentum, and macro</tspan>
+      <tspan x="816" dy="34">signals continue to shape</tspan>
+      <tspan x="816" dy="34">directional sentiment.</tspan>
+    </text>
+  </g>
+</svg>
