@@ -1,5 +1,8 @@
 import time
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -104,6 +107,22 @@ class FastApiTests(unittest.TestCase):
         self.assertEqual(stream.status_code, 200)
         self.assertIn("text/event-stream", stream.headers["content-type"])
         self.assertIn("event: run.completed", body)
+
+    def test_evaluation_endpoint_exposes_summary_without_case_payloads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "latest_report.json"
+            report.write_text(json.dumps({
+                "case_count": 1,
+                "task_classification_accuracy_pct": 100.0,
+                "cases": [{"case_id": "sample", "error": "private fixture detail"}],
+            }), encoding="utf-8")
+            client = TestClient(create_app(self.bridge, evaluation_report=report))
+            payload = client.get("/api/evaluation").json()
+            self.assertTrue(payload["available"])
+            self.assertEqual(payload["summary"]["case_count"], 1)
+            self.assertNotIn("cases", payload["summary"])
+            report.unlink()
+            self.assertFalse(client.get("/api/evaluation").json()["available"])
 
 
 if __name__ == "__main__":

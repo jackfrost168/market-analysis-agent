@@ -2528,3 +2528,47 @@ button:disabled {
   display: block;
   margin-top: 0.35rem;
 }
+
+.evaluation-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.metrics-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.evaluation-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 0.7rem;
+}
+
+.evaluation-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem;
+  border: 1px solid var(--line, #ded7ca);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.evaluation-metric > span {
+  font-size: 0.8rem;
+  color: var(--muted, #766f65);
+}
+
+.evaluation-metric > strong {
+  font-size: clamp(1.3rem, 2.5vw, 1.85rem);
+  line-height: 1.1;
+}
+
+.evaluation-metric > small {
+  color: var(--muted, #766f65);
+  line-height: 1.4;
+}

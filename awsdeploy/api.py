@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -14,6 +16,7 @@ from .bridge import AgentBridge
 
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+DEFAULT_EVALUATION_REPORT = Path(__file__).resolve().parents[1] / "evals" / "latest_report.json"
 
 
 class AnalysisRequest(BaseModel):
@@ -36,9 +39,12 @@ class AnalysisRequest(BaseModel):
     conversation_id: str | None = None
 
 
-def create_app(bridge: AgentBridge | None = None) -> FastAPI:
+def create_app(bridge: AgentBridge | None = None, evaluation_report: Path | None = None) -> FastAPI:
     app = FastAPI(title="Stateful Market Agent", version="1.0.0")
     app.state.bridge = bridge or AgentBridge()
+    app.state.evaluation_report = Path(
+        evaluation_report or os.environ.get("AGENT_EVAL_REPORT") or DEFAULT_EVALUATION_REPORT
+    )
 
     @app.exception_handler(ValueError)
     async def value_error_handler(_request: Request, exc: ValueError):
@@ -82,6 +88,23 @@ def create_app(bridge: AgentBridge | None = None) -> FastAPI:
     @app.get("/api/metrics")
     def metrics(limit: int = 50) -> Dict[str, Any]:
         return app.state.bridge.observability(max(1, min(limit, 100)))
+
+    @app.get("/api/evaluation")
+    def evaluation() -> Dict[str, Any]:
+        path = app.state.evaluation_report
+        if not path.is_file():
+            return {"available": False, "message": "Run the labelled benchmark to publish evaluation results."}
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(report, dict) or not isinstance(report.get("cases"), list):
+                raise ValueError("Invalid evaluation report format")
+            return {
+                "available": True,
+                "generated_at": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+                "summary": {key: value for key, value in report.items() if key != "cases"},
+            }
+        except (OSError, ValueError, json.JSONDecodeError):
+            return {"available": False, "message": "Evaluation report is unreadable; rerun the benchmark."}
 
     @app.post("/api/runs", status_code=202)
     def start_run(payload: AnalysisRequest) -> Dict[str, str]:

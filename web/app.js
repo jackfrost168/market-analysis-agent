@@ -33,6 +33,66 @@ const SOURCE_LABELS = {
   price_history: "Price history",
 };
 
+const BENCHMARK_METRICS = [
+  ["Task classification", data => data.task_classification_accuracy_pct, "%", "Correct task type / labelled questions"],
+  ["Tool selection", data => data.tool_selection?.exact_match_accuracy_pct, "%", "Exact source-set match / labelled questions"],
+  ["Critical evidence", data => data.critical_evidence_coverage_pct, "%", "Valid evidence types found / required types"],
+  ["Invalid references", data => data.invalid_evidence_reference_rate_pct, "%", "Invalid evidence ID mentions / all cited IDs; lower is better"],
+  ["Numeric traceability errors", data => data.numeric_error_rate_pct, "%", "Unsupported currency or percentage claims / measured claims; lower is better"],
+  ["Completion", data => data.completion_rate_pct, "%", "Reports completed / submitted benchmark cases"],
+  ["Average runtime", data => data.runtime?.average_ms, "ms", "End-to-end average per benchmark case"],
+  ["Model calls", data => data.model_calls?.average_per_task, "calls / task", "Average Ollama calls per benchmark question"],
+  ["Token usage", data => data.token_and_cost?.average_tokens_per_task, "tokens / task", "Generation tokens per task; local Ollama has no metered API fee"],
+];
+
+function metricCard(label, value, unit, detail) {
+  const hasValue = value !== null && value !== undefined && Number.isFinite(Number(value));
+  const display = hasValue ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "N/A";
+  return `<article class="evaluation-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(display)}${hasValue && unit === "%" ? "%" : ""}</strong><small>${escapeHtml(unit === "%" ? detail : `${unit} · ${detail}`)}</small></article>`;
+}
+
+async function loadMetricsDashboard() {
+  const button = $("refreshMetricsButton");
+  button.disabled = true;
+  const [evaluation, service] = await Promise.allSettled([
+    fetch("/api/evaluation", { cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }),
+    fetch("/api/metrics?limit=100", { cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }),
+  ]);
+  if (evaluation.status === "fulfilled" && evaluation.value.available) {
+    const result = evaluation.value;
+    const data = result.summary || {};
+    $("evaluationMeta").textContent = `${data.case_count ?? 0} labelled cases · Measured ${formatTimestamp(result.generated_at)}`;
+    $("evaluationMetrics").innerHTML = BENCHMARK_METRICS.map(([label, read, unit, detail]) => metricCard(label, read(data), unit, detail)).join("");
+    const cost = data.token_and_cost || {};
+    const equivalent = cost.estimated_equivalent_cost_usd;
+    $("evaluationMetrics").insertAdjacentHTML("beforeend", metricCard("API-equivalent cost", equivalent, "USD / benchmark", "Only shown when token rates are configured; hardware cost is excluded"));
+  } else {
+    const message = evaluation.status === "fulfilled" ? evaluation.value.message : evaluation.reason?.message;
+    $("evaluationMeta").textContent = message || "Benchmark unavailable";
+    $("evaluationMetrics").innerHTML = BENCHMARK_METRICS.map(([label, , unit, detail]) => metricCard(label, null, unit, detail)).join("");
+  }
+  if (service.status === "fulfilled") {
+    const data = service.value;
+    $("serviceMetricsMeta").textContent = `Latest ${data.persisted_runs ?? 0} saved runs · ${data.active_runs ?? 0} active now`;
+    $("serviceMetrics").innerHTML = [
+      metricCard("Saved runs completed", data.completion_rate_pct, "%", `${data.completed_runs ?? 0} completed · ${data.failed_runs ?? 0} failed`),
+      metricCard("Average runtime", data.average_runtime_ms, "ms", "Measured runs only; older reports predate instrumentation"),
+      metricCard("Model calls", data.model_calls_total, "calls", "Across the saved runs with recorded usage"),
+      metricCard("Tokens", data.tokens_total, "tokens", "Generation usage across measured saved runs"),
+    ].join("");
+  } else {
+    $("serviceMetricsMeta").textContent = `Service metrics unavailable: ${service.reason?.message || "request failed"}`;
+    $("serviceMetrics").innerHTML = "";
+  }
+  button.disabled = false;
+}
+
 const $ = (id) => document.getElementById(id);
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -767,6 +827,7 @@ async function submitAnalysis(event) {
     renderReport(run.report || {}, run.node_trace || []);
     finishRunUi(true, `Report ready. ${run.node_trace?.length || 0} node executions recorded; inspect the evidence checks below.`);
     loadHistory();
+    loadMetricsDashboard();
     $("reportContent").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     finishRunUi(false, error.message);
@@ -902,6 +963,7 @@ function bindEvents() {
   $("predictionProvider").addEventListener("change", updatePredictionProviderHint);
   loadPredictionProviders();
   $("refreshHistoryButton").addEventListener("click", loadHistory);
+  $("refreshMetricsButton").addEventListener("click", loadMetricsDashboard);
   $("replayButton").addEventListener("click", replaySavedRun);
   $("exportReportButton").addEventListener("click", exportReport);
   $("savedRunSelect").addEventListener("change", () => { $("replayButton").disabled = isBusy || historyLoading || !$("savedRunSelect").value; });
@@ -945,6 +1007,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
   loadModels();
   loadHistory();
+  loadMetricsDashboard();
   loadArchitecture();
   fetchPrice($("asset").value);
 });
