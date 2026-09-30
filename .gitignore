@@ -8,3 +8,5 @@ __pycache__/
 data/*.sqlite3
 data/*.sqlite3-*
 data/runs/
+data/eval/
+evals/latest_report.json

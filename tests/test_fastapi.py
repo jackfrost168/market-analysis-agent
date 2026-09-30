@@ -50,6 +50,9 @@ class FixtureService:
     def history(self, limit):
         return []
 
+    def observability(self, limit):
+        return {"persisted_runs": len(self.saved), "completed_runs": len(self.saved)}
+
 
 class FastApiTests(unittest.TestCase):
     def setUp(self):
@@ -91,6 +94,16 @@ class FastApiTests(unittest.TestCase):
         response = self.client.post("/api/analyze", json={"query": "Apple outlook"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["report"]["summary"], "Apple outlook")
+
+    def test_metrics_and_sse_completion(self):
+        self.assertEqual(self.client.get("/api/metrics").status_code, 200)
+        response = self.client.post("/api/runs", json={"asset": "BTC", "query": "Bitcoin outlook"})
+        run_id = response.json()["run_id"]
+        with self.client.stream("GET", f"/api/runs/{run_id}/events") as stream:
+            body = "".join(stream.iter_text())
+        self.assertEqual(stream.status_code, 200)
+        self.assertIn("text/event-stream", stream.headers["content-type"])
+        self.assertIn("event: run.completed", body)
 
 
 if __name__ == "__main__":

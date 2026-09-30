@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from agent.llm import OllamaClient
+from agent.llm import OllamaClient, _usage_fields
 
 
 @patch.dict(os.environ, {"OLLAMA_MODEL": ""})
@@ -30,6 +30,16 @@ class ModelSelectionTests(unittest.TestCase):
         client = OllamaClient()
         with patch.object(client, "list_models", side_effect=TimeoutError("fixture")):
             self.assertEqual(client.choose_model("auto"), "qwen3:8b")
+
+    def test_ollama_usage_and_configured_equivalent_cost(self):
+        with patch.dict(os.environ, {
+            "LLM_INPUT_USD_PER_MILLION_TOKENS": "1.0",
+            "LLM_OUTPUT_USD_PER_MILLION_TOKENS": "2.0",
+        }):
+            usage = _usage_fields({"prompt_eval_count": 1000, "eval_count": 500, "total_duration": 2_000_000})
+        self.assertEqual(usage["total_tokens"], 1500)
+        self.assertEqual(usage["ollama_total_duration_ms"], 2.0)
+        self.assertEqual(usage["estimated_equivalent_cost_usd"], 0.002)
 
 
 if __name__ == "__main__":

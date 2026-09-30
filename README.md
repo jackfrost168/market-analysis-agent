@@ -222,6 +222,19 @@ Verification also checks invalid evidence IDs, unsupported claims, chronology, c
 
 These are heuristic evidence diagnostics, not calibrated prediction accuracy, truth probabilities, or investment success rates. Existing evidence IDs establish traceability, not semantic entailment of every claim.
 
+## Evaluation And Runtime Metrics
+
+The independently labelled cases in `evals/benchmark.json` measure task classification, tool selection, critical-evidence coverage, pre-repair invalid references, traceability-based numeric errors, completion, runtime, model calls, and generation-token usage. Run a smoke case or the full live suite with:
+
+```bash
+python -m evals.run_eval --limit 1
+python -m evals.run_eval --output evals/latest_report.json
+```
+
+Ollama generation usage comes from `prompt_eval_count` and `eval_count`. Local Ollama has no metered API token fee. Optional input/output rates produce an explicitly labelled API-equivalent estimate; hardware and electricity are outside that estimate.
+
+The browser receives node-level progress over Server-Sent Events and falls back to polling after a connection failure. This is structured workflow streaming rather than token-by-token thesis streaming, so incomplete JSON is never rendered as a report. `GET /api/metrics` summarizes persisted run completion, duration, model calls, tokens, and active in-process work.
+
 ## Tests
 
 ```powershell

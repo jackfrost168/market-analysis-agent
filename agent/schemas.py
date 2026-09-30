@@ -71,12 +71,29 @@ class ThesisBranch(BaseModel):
     invalidation_conditions: List[str] = Field(default_factory=list)
 
 
+class WatchItem(BaseModel):
+    signal: str
+    why_it_matters: str
+    confirm_if: str
+    invalidate_if: str
+    evidence_ids: List[str] = Field(default_factory=list, max_length=4)
+
+
+class DecisionBrief(BaseModel):
+    key_insight: str = ""
+    why_it_matters: str = ""
+    evidence_ids: List[str] = Field(default_factory=list, max_length=4)
+    watch_items: List[WatchItem] = Field(default_factory=list, max_length=3)
+    next_research_action: str = ""
+
+
 class ThesisGraph(BaseModel):
     current_view: str
     why: List[str] = Field(default_factory=list, max_length=5)
     future_expectation: str
     upside: ThesisBranch
     downside: ThesisBranch
+    decision_brief: DecisionBrief = Field(default_factory=DecisionBrief)
 
 
 class ScoreCard(BaseModel):

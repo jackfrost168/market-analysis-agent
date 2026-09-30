@@ -391,15 +391,80 @@ function setBusy(value) {
 
 async function pollRun(runId) {
   for (let attempt = 0; attempt < 900; attempt += 1) {
-    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, { cache: "no-store" });
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}?poll=${attempt}`, { cache: "no-store" });
     const run = await response.json();
     if (!response.ok) throw new Error(run.error || `Run status failed (${response.status})`);
     updateRunProgress(run);
     if (run.status === "completed") return run;
     if (run.status === "failed") throw new Error(run.error || run.message || "Agent run failed");
+    if (attempt > 0 && attempt % 30 === 0) {
+      $("runningMessage").textContent = `${run.message || "Waiting for the Agent..."} · Poll ${attempt}/900`;
+    }
     await delay(800);
   }
   throw new Error("The run exceeded the browser polling limit.");
+}
+
+function streamRun(runId) {
+  if (!("EventSource" in window)) return pollRun(runId);
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+    let settled = false;
+    let receivedEvent = false;
+    let fallbackStarted = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      source.close();
+      callback(value);
+    };
+    const startPollingFallback = () => {
+      if (settled || fallbackStarted) return;
+      fallbackStarted = true;
+      source.close();
+      pollRun(runId).then(value => finish(resolve, value)).catch(error => finish(reject, error));
+    };
+    const parse = (event) => {
+      receivedEvent = true;
+      return JSON.parse(event.data);
+    };
+    source.addEventListener("run.progress", (event) => {
+      try {
+        updateRunProgress(parse(event));
+      } catch (error) {
+        finish(reject, error);
+      }
+    });
+    source.addEventListener("run.completed", (event) => {
+      try {
+        const run = parse(event);
+        updateRunProgress(run);
+        finish(resolve, run);
+      } catch (error) {
+        finish(reject, error);
+      }
+    });
+    source.addEventListener("run.failed", (event) => {
+      try {
+        const run = parse(event);
+        finish(reject, new Error(run.error || run.message || "Agent run failed"));
+      } catch (error) {
+        finish(reject, error);
+      }
+    });
+    source.addEventListener("run.missing", (event) => {
+      const run = parse(event);
+      finish(reject, new Error(run.error || "Run not found"));
+    });
+    source.onerror = () => {
+      startPollingFallback();
+    };
+    setTimeout(() => {
+      if (!settled && !receivedEvent) {
+        startPollingFallback();
+      }
+    }, 5000);
+  });
 }
 
 function scoreCard(label, value, explanation, conflict = false) {
@@ -527,7 +592,7 @@ function renderLlmCalls(llm = {}) {
   $("llmInputExplanation").textContent = llm.input_explanation || "";
   const calls = llm.calls || [];
   $("llmCalls").innerHTML = calls.length
-    ? calls.map((call) => `<article class="llm-call"><div><strong>${escapeHtml(call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div></dl><strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to Ollama</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
+    ? calls.map((call) => `<article class="llm-call"><div><strong>${escapeHtml(call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Tokens</dt><dd>${escapeHtml(call.usage?.total_tokens ?? "unavailable")}</dd></div></dl><strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to Ollama</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
     : '<div class="empty-evidence">No LLM call record is available.</div>';
 }
 
@@ -544,6 +609,8 @@ function renderExecutionBrief(report) {
     ["Local LLM", `${summary.llmSuccess} / ${summary.llmCalls.length} succeeded`, `${summary.failedLlm} fallback calls · ${summary.repaired} thesis repair passes`],
     ["Historical RAG", `${summary.memoryUsed} / 3 chunks used`, embeddingText],
     ["Feedback loop", `${summary.retryCount} retrieval retries`, `${summary.checksPassed} / ${summary.checksTotal} final checks passed`],
+    ["Runtime", report.observability?.total_duration_ms != null ? `${(report.observability.total_duration_ms / 1000).toFixed(1)} s` : "Unavailable", `${report.observability?.node_executions ?? 0} node executions`],
+    ["Model usage", `${report.observability?.model_calls?.total_tokens ?? 0} tokens`, `${report.observability?.model_calls?.total ?? summary.llmCalls.length} calls · $${Number(report.observability?.model_calls?.metered_api_cost_usd || 0).toFixed(4)} metered API fee`],
   ];
   $("executionMetrics").innerHTML = metrics.map(([label, value, detail]) =>
     `<div class="execution-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></div>`
@@ -598,6 +665,13 @@ function renderReport(report, trace = [], { replay = false } = {}) {
     ? situation.why.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : "<li>No concise reason list was generated.</li>";
   $("futureExpectation").textContent = report.future_expectation || "";
+  const decisionBrief = report.decision_brief || {};
+  $("keyInsight").textContent = decisionBrief.key_insight || "No evidence-backed leading insight was available.";
+  $("keyInsightWhy").textContent = decisionBrief.why_it_matters || "";
+  $("watchItems").innerHTML = (decisionBrief.watch_items || []).length
+    ? decisionBrief.watch_items.map((item, index) => `<article class="watch-item"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(item.signal || "Signal")}</strong><p>${escapeHtml(item.why_it_matters || "")}</p><small><b>Confirm:</b> ${escapeHtml(item.confirm_if || "--")}</small><small><b>Invalidate:</b> ${escapeHtml(item.invalidate_if || "--")}</small></div></article>`).join("")
+    : '<div class="empty-evidence">No supported watch item survived verification.</div>';
+  $("nextResearchAction").textContent = decisionBrief.next_research_action || "Collect the missing critical evidence before extending the conclusion.";
 
   const explanations = scores.explanation || {};
   $("scoreGrid").innerHTML = [
@@ -689,7 +763,7 @@ async function submitAnalysis(event) {
     const started = await response.json();
     if (!response.ok) throw new Error(started.error || `Run could not start (${response.status})`);
     activeRunId = started.run_id;
-    const run = await pollRun(activeRunId);
+    const run = await streamRun(activeRunId);
     renderReport(run.report || {}, run.node_trace || []);
     finishRunUi(true, `Report ready. ${run.node_trace?.length || 0} node executions recorded; inspect the evidence checks below.`);
     loadHistory();
@@ -725,6 +799,7 @@ async function loadHistory() {
       ? runs.map(run => `<option value="${escapeHtml(run.run_id)}">${escapeHtml(run.symbol || "Asset")} · ${escapeHtml((run.task_type || "research").replaceAll("_", " "))} · ${escapeHtml(formatTimestamp(run.created_at))}</option>`).join("")
       : '<option value="">No saved reports yet</option>';
     if (runs.some(run => run.run_id === previous)) $("savedRunSelect").value = previous;
+    else if (runs.length) $("savedRunSelect").value = runs[0].run_id;
     $("historyStatus").textContent = runs.length
       ? `${runs.length} saved reports. Replay uses stored evidence and makes no new research calls.`
       : "Complete a run to enable replay. Reports survive a server restart.";
@@ -734,6 +809,12 @@ async function loadHistory() {
     historyLoading = false;
     $("refreshHistoryButton").disabled = false;
     $("replayButton").disabled = isBusy || !$("savedRunSelect").value;
+    // A browser refresh clears the in-memory view, but completed reports are
+    // persisted on the server. Restore the newest one so the page cannot look
+    // stuck in the previous progress panel after a completed run.
+    if (!displayedReport && !isBusy && $("savedRunSelect").value) {
+      replaySavedRun();
+    }
   }
 }
 

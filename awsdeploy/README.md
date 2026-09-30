@@ -39,7 +39,18 @@ curl http://127.0.0.1:8001/api/health
 
 运行回归测试：`.venv/bin/python -m unittest discover -s tests -v`。
 
-`/docs` 是 FastAPI 自动生成的接口文档。网页继续调用原有的 `/api/runs`、`/api/runs/{run_id}` 等路径；`POST /api/analyze` 仍提供同步调用。较长的分析建议使用 `POST /api/runs`，然后轮询返回的 `run_id`。
+`/docs` 是 FastAPI 自动生成的接口文档。网页先调用 `POST /api/runs`，随后通过 `/api/runs/{run_id}/events` 的 SSE 流接收节点级实时状态；连接不支持 SSE 或中途断线时，会自动退回 `/api/runs/{run_id}` 轮询。`POST /api/analyze` 仍提供同步调用。
+
+运行指标可以通过 `GET /api/metrics` 查看。单次报告的 `observability` 包括总耗时、节点耗时、工具和模型调用、Ollama token 数量以及成本口径。本地 Ollama 的 token API 计费为 0；若需要与云 API 对比，可以配置 `LLM_INPUT_USD_PER_MILLION_TOKENS` 和 `LLM_OUTPUT_USD_PER_MILLION_TOKENS`。
+
+完整评测见根目录 `evals/`：
+
+```bash
+.venv/bin/python -m evals.run_eval --limit 1
+.venv/bin/python -m evals.run_eval --output evals/latest_report.json
+```
+
+完整评测会调用实时数据源和 Ollama，不属于快速单元测试。
 
 ## 上传 AWS 时的配置
 
@@ -51,7 +62,9 @@ curl http://127.0.0.1:8001/api/health
 4. 配置 `OLLAMA_URL`、`OLLAMA_TAGS_URL`、`OLLAMA_MODEL`。完整的本地 LLM 分析需要可访问的 Ollama 服务和已安装的模型。`OLLAMA_EMBED_MODEL` 留空时使用本地 hash embedding。设置真实的 `SEC_USER_AGENT` 联系信息。环境变量模板见根目录 `.env.example`；程序**不会自动读取** `.env` 文件。
 5. 使用反向代理或负载均衡器提供 HTTPS 和访问控制，让 Uvicorn 监听 `127.0.0.1:8001`。应用本身没有用户认证；不要直接把分析接口公开到互联网。Ollama 的 11434 端口也应保持私有。
 
-当前异步任务状态保存在进程内，已完成报告保存在 SQLite。先使用 **一个 Uvicorn worker、一台实例**；多 worker 会让任务轮询落到不同进程。进程重启时未完成任务不能恢复，需要重新提交。日后若要水平扩展，需要外部任务队列和共享持久存储。
+当前异步任务状态和 SSE 事件保存在进程内，已完成报告和失败记录保存在 SQLite。先使用 **一个 Uvicorn worker、一台实例**；多 worker 会让状态请求落到不同进程。进程重启时未完成任务不能恢复，需要重新提交。日后若要水平扩展，需要外部任务队列、共享状态和事件存储。
+
+Nginx 的 SSE 路径必须关闭响应缓冲，参考 `nginx-financial-agent.conf.example` 中的 `proxy_buffering off`。修改后运行 `sudo nginx -t` 并 reload Nginx。
 
 ## EC2 使用 Mac 上的 Ollama
 

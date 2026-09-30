@@ -22,6 +22,57 @@ class StructuredResult:
     latency_ms: int = 0
     error: Optional[str] = None
     raw_text: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    ollama_total_duration_ms: Optional[float] = None
+    estimated_equivalent_cost_usd: Optional[float] = None
+
+    @property
+    def usage(self) -> Dict[str, Any]:
+        """Normalized usage attached to every persisted LLM call record."""
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "metered_api_cost_usd": 0.0,
+            "estimated_equivalent_cost_usd": self.estimated_equivalent_cost_usd,
+            "pricing_basis": (
+                "configured_api_equivalent"
+                if self.estimated_equivalent_cost_usd is not None
+                else "local_ollama_unmetered"
+            ),
+            "ollama_total_duration_ms": self.ollama_total_duration_ms,
+        }
+
+
+def _usage_fields(body: Dict[str, Any]) -> Dict[str, Any]:
+    prompt_tokens = int(body.get("prompt_eval_count") or 0)
+    completion_tokens = int(body.get("eval_count") or 0)
+    input_rate = os.environ.get("LLM_INPUT_USD_PER_MILLION_TOKENS")
+    output_rate = os.environ.get("LLM_OUTPUT_USD_PER_MILLION_TOKENS")
+    estimated_cost = None
+    if input_rate is not None or output_rate is not None:
+        try:
+            estimated_cost = round(
+                prompt_tokens * float(input_rate or 0) / 1_000_000
+                + completion_tokens * float(output_rate or 0) / 1_000_000,
+                8,
+            )
+        except ValueError:
+            estimated_cost = None
+    total_duration = body.get("total_duration")
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "ollama_total_duration_ms": (
+            round(float(total_duration) / 1_000_000, 3)
+            if isinstance(total_duration, (int, float))
+            else None
+        ),
+        "estimated_equivalent_cost_usd": estimated_cost,
+    }
 
 
 def _clean_json_text(raw_text: str) -> str:
@@ -113,6 +164,8 @@ class OllamaClient:
             method="POST",
             headers={"Content-Type": "application/json"},
         )
+        body: Dict[str, Any] = {}
+        raw_text = ""
         try:
             with urllib.request.urlopen(
                 request, timeout=self.timeout_seconds
@@ -127,6 +180,7 @@ class OllamaClient:
                 data=validated.model_dump(),
                 latency_ms=round((time.perf_counter() - started) * 1000),
                 raw_text=raw_text,
+                **_usage_fields(body),
             )
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValidationError) as exc:
             return StructuredResult(
@@ -134,6 +188,8 @@ class OllamaClient:
                 model=selected_model,
                 latency_ms=round((time.perf_counter() - started) * 1000),
                 error=str(exc),
+                raw_text=raw_text,
+                **_usage_fields(body),
             )
         except Exception as exc:
             return StructuredResult(
@@ -141,4 +197,6 @@ class OllamaClient:
                 model=selected_model,
                 latency_ms=round((time.perf_counter() - started) * 1000),
                 error=f"{type(exc).__name__}: {exc}",
+                raw_text=raw_text,
+                **_usage_fields(body),
             )

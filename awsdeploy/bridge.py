@@ -31,13 +31,25 @@ class AgentBridge:
             "run_id": run_id,
             "status": saved.get("status"),
             "report": saved.get("report"),
+            "current_node": "END" if saved.get("status") == "completed" else state.get("current_node"),
+            "message": "Report ready." if saved.get("status") == "completed" else state.get("message"),
+            "error": state.get("error"),
+            "revision": len(state.get("node_trace") or []) + 2,
             "node_trace": state.get("node_trace") or [],
             "decision_audit": state.get("decision_audit") or [],
             "intermediate_results": state.get("intermediate_results") or [],
             "tool_calls": state.get("tool_calls") or [],
             "llm_calls": state.get("llm_calls") or [],
             "source_status": state.get("source_status") or {},
+            "evidence_gate": state.get("evidence_gate") or {},
+            "retrieval_attempts": state.get("retrieval_attempts", 0),
+            "run_metrics": state.get("run_metrics") or {},
         }
+
+    def observability(self, limit: int = 50) -> Dict[str, Any]:
+        result = self.service.observability(limit)
+        result.update(self.runs.stats())
+        return result
 
     def get_audit(self, run_id: str) -> Optional[Dict[str, Any]]:
         run = self.get_run(run_id)

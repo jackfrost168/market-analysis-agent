@@ -543,6 +543,7 @@ As-of time: {as_of}
             "purpose": "Understand a normal user question and extract a validated financial task",
             "input_manifest": ["asset_input", "user_query", "requested_horizon", "as_of"],
             "prompt_preview": prompt,
+            "usage": result.usage,
             "error": result.error,
         }
         return {
@@ -722,6 +723,7 @@ Target price: {state.get('target_price') if state.get('target_price') is not Non
                 "target_price": state.get("target_price"),
             },
             "prompt_preview": prompt,
+            "usage": llm_result.usage,
             "output_manifest": {
                 "llm_suggested_sources": source_selection["llm_suggested_sources"],
                 "rule_accepted_sources": sources,
@@ -1001,6 +1003,7 @@ Research questions: {state['research_plan']['research_questions']}
             "purpose": "Generate constrained search queries for explicit evidence gaps",
             "input_manifest": {"missing_evidence": missing, "verification_sources": verification_sources},
             "prompt_preview": prompt,
+            "usage": llm_result.usage,
             "error": llm_result.error,
         }
         return {
@@ -1118,6 +1121,11 @@ Write current_view as a concise explanation, not a one-word directional label.
 For technical analysis, explain the supplied period return, realized volatility, and maximum drawdown
 when available. These are historical measurements, not forecasts or evidence of a causal catalyst.
 Keep why to at most four concise reasons. State what future evidence could change the view.
+Add a compact decision_brief that contributes new synthesis instead of repeating current_view.
+Its key insight should identify the most decision-relevant tension, asymmetry, or leading indicator.
+Add at most three watch_items with a specific observable signal, why it matters, what would confirm
+the interpretation, and what would invalidate it. Cite real evidence IDs for the key insight and every
+watch item. Keep next_research_action to one concrete sentence. Avoid generic advice and boilerplate.
 Do not discuss a data source or probabilities absent from the evidence bundle, even as boilerplate.
 When target_assessment is supplied, obey its direction and current condition status.
 The structured target overrides any stale target number in the user query.
@@ -1154,6 +1162,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
                 "quantitative_sections": list((state.get("quantitative_analysis") or {}).keys()),
             },
             "prompt_preview": prompt,
+            "usage": result.usage,
             "error": result.error,
         }
         return {
@@ -1267,6 +1276,20 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             if not repaired.get(field) or mentions_missing_source(repaired[field]):
                 repaired[field] = fallback[field]
         repaired["why"] = [reason for reason in repaired.get("why") or [] if not mentions_missing_source(reason)] or fallback["why"]
+        brief = repaired.get("decision_brief") or {}
+        brief_ids = [item for item in brief.get("evidence_ids") or [] if item in evidence_by_id]
+        watch_items = []
+        for item in brief.get("watch_items") or []:
+            valid_ids = [evidence_id for evidence_id in item.get("evidence_ids") or [] if evidence_id in evidence_by_id]
+            if valid_ids:
+                watch_items.append({**item, "evidence_ids": valid_ids})
+        if not brief.get("key_insight") or not brief_ids:
+            repaired["decision_brief"] = copy.deepcopy(fallback["decision_brief"])
+        else:
+            brief["evidence_ids"] = brief_ids
+            brief["watch_items"] = watch_items or copy.deepcopy(fallback["decision_brief"]["watch_items"])
+            brief["next_research_action"] = brief.get("next_research_action") or fallback["decision_brief"]["next_research_action"]
+            repaired["decision_brief"] = brief
         return repaired
 
     def _fallback_thesis(self, state: AgentState) -> Dict[str, Any]:
@@ -1345,12 +1368,42 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             downside["scenario"] = "No direct downside evidence was collected; this branch is intentionally not asserted."
             downside["chain"] = []
             downside["supporting_evidence_ids"] = []
+        ranked = positive + negative
+        lead = ranked[0] if ranked else None
+        key_insight = (
+            f"The most decision-relevant evidence is: {lead['title']}"
+            if lead
+            else "No evidence-backed leading indicator is available yet."
+        )
+        watch_items = []
+        for item in ranked[:3]:
+            watch_items.append(
+                {
+                    "signal": item["title"],
+                    "why_it_matters": "A fresh change in this evidence can shift the balance between the upside and downside scenarios.",
+                    "confirm_if": "A newer independent source confirms the same direction and transmission mechanism.",
+                    "invalidate_if": "A newer primary or higher-reliability source contradicts the cited evidence.",
+                    "evidence_ids": [item["id"]],
+                }
+            )
+        decision_brief = {
+            "key_insight": key_insight,
+            "why_it_matters": "It has the highest available reliability among the directional evidence collected for this request." if lead else "More task-specific evidence is required before drawing a decision-relevant conclusion.",
+            "evidence_ids": [lead["id"]] if lead else [],
+            "watch_items": watch_items,
+            "next_research_action": (
+                "Refresh the highest-priority evidence after the next material company, market, or filing update."
+                if lead
+                else "Retrieve the missing critical evidence type before extending the conclusion."
+            ),
+        }
         return {
             "current_view": view,
             "why": why,
             "future_expectation": future,
             "upside": upside,
             "downside": downside,
+            "decision_brief": decision_brief,
         }
 
     def verify_and_calibrate(self, state: AgentState) -> Dict[str, Any]:
@@ -1364,7 +1417,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             fallback = self._fallback_thesis(state)
             affected = {item["path"].split(".", 1)[0].split("[", 1)[0] for item in numeric_issues}
             for field in affected:
-                if field in {"upside", "downside", "current_view", "future_expectation", "why"}:
+                if field in {"upside", "downside", "current_view", "future_expectation", "why", "decision_brief"}:
                     thesis[field] = copy.deepcopy(fallback[field])
             issues.append(
                 {
@@ -1402,6 +1455,31 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             ]
             thesis[branch_name] = branch
 
+        brief = thesis.get("decision_brief") or {}
+        brief_original_ids = list(brief.get("evidence_ids") or [])
+        total_references += len(brief_original_ids)
+        brief_valid_ids = [item for item in brief_original_ids if item in evidence_by_id]
+        referenced.extend(brief_valid_ids)
+        if len(brief_valid_ids) != len(brief_original_ids):
+            issues.append({"type": "invalid_evidence_id", "section": "decision_brief", "claim": brief.get("key_insight")})
+        if brief.get("key_insight") and not brief_valid_ids:
+            issues.append({"type": "unsupported_claim", "section": "decision_brief", "claim": brief.get("key_insight")})
+        brief["evidence_ids"] = brief_valid_ids
+        cleaned_watch_items = []
+        for item in brief.get("watch_items") or []:
+            original_ids = list(item.get("evidence_ids") or [])
+            total_references += len(original_ids)
+            valid_ids = [evidence_id for evidence_id in original_ids if evidence_id in evidence_by_id]
+            referenced.extend(valid_ids)
+            if len(valid_ids) != len(original_ids):
+                issues.append({"type": "invalid_evidence_id", "section": "watch_item", "claim": item.get("signal")})
+            if not valid_ids:
+                issues.append({"type": "unsupported_claim", "section": "watch_item", "claim": item.get("signal")})
+                continue
+            cleaned_watch_items.append({**item, "evidence_ids": valid_ids})
+        brief["watch_items"] = cleaned_watch_items
+        thesis["decision_brief"] = brief
+
         negative = [item for item in evidence if item.get("direction") == -1 and item.get("temporal_valid", True)]
         fresh_negative = [item for item in negative if item.get("freshness") in {"fresh", "current"}]
         downside = thesis.get("downside") or {}
@@ -1433,7 +1511,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
         quality_values = [float(item.get("reliability") or 0) for item in evidence]
         evidence_quality = round(sum(quality_values) / len(quality_values) * 100) if quality_values else 0
         completeness = int((state.get("evidence_gate") or {}).get("coverage_pct") or 0)
-        valid_reference_ratio = len(set(referenced)) / max(1, total_references)
+        valid_reference_ratio = len(referenced) / max(1, total_references)
         chain_support = round(valid_reference_ratio * (0.55 + evidence_quality / 100 * 0.45) * 100)
         positive_count = sum(item.get("direction") == 1 for item in evidence)
         negative_count = sum(item.get("direction") == -1 for item in evidence)
@@ -1478,6 +1556,19 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             "conflicts": conflicts,
             "needs_more_evidence": needs_more,
             "requested_sources": list(dict.fromkeys(requested_sources)),
+            "reference_stats": {
+                "total_mentions": total_references,
+                "valid_mentions": len(referenced),
+                "invalid_mentions": max(0, total_references - len(referenced)),
+                "invalid_reference_rate_pct": round(
+                    max(0, total_references - len(referenced)) / total_references * 100,
+                    2,
+                ) if total_references else None,
+            },
+            "numeric_stats": {
+                "unsupported_numeric_claims_detected": len(numeric_issues),
+                "method": "Currency and percentage claims are checked against deterministic calculations and normalized evidence within a bounded tolerance.",
+            },
             "checks": {
                 "evidence_ids_exist": not any(issue["type"] == "invalid_evidence_id" for issue in issues),
                 "claims_have_support": not unsupported,
@@ -1599,6 +1690,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             "upside_thesis": (state.get("thesis_graph") or {}).get("upside") or {},
             "downside_thesis": (state.get("thesis_graph") or {}).get("downside") or {},
             "future_expectation": (state.get("thesis_graph") or {}).get("future_expectation"),
+            "decision_brief": (state.get("thesis_graph") or {}).get("decision_brief") or {},
             "confidence_scores": (state.get("verification") or {}).get("scores") or {},
             "evidence_conflicts": (state.get("verification") or {}).get("conflicts") or [],
             "verification": state.get("verification") or {},

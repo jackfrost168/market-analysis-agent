@@ -1,12 +1,14 @@
 import os
 import uuid
 import math
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .graph import build_graph, graph_spec
 from .llm import OllamaClient
 from .nodes import AgentNodes
+from .observability import aggregate_run_metrics, build_run_metrics
 from .repositories import RunRepository
 from .tools.market_data import get_price_snapshot, resolve_asset, utc_now_iso
 from .tools.prediction_markets import get_polymarket_status, select_provider
@@ -101,6 +103,8 @@ class AgentService:
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        started_perf = time.perf_counter()
+        started_at = utc_now_iso()
         run_id = run_id or str(uuid.uuid4())
         initial = self._initial_state(payload, run_id)
         config = {
@@ -112,7 +116,15 @@ class AgentService:
             final_state = snapshot
             if progress_callback:
                 progress_callback(snapshot)
+        completed_at = utc_now_iso()
+        final_state["run_metrics"] = build_run_metrics(
+            final_state,
+            started_at=started_at,
+            completed_at=completed_at,
+            total_duration_ms=round((time.perf_counter() - started_perf) * 1000),
+        )
         if final_state.get("report"):
+            final_state["report"]["observability"] = final_state["run_metrics"]
             final_state["report"]["workflow"]["node_trace"] = final_state.get("node_trace") or []
             final_state["report"]["agent_audit"] = {
                 "decision_audit": final_state.get("decision_audit") or [],
@@ -130,8 +142,33 @@ class AgentService:
                     "tool_calls": len(final_state.get("tool_calls") or []),
                 }
             )
+        if progress_callback:
+            progress_callback(final_state)
         self.runs.save(final_state)
         return final_state
+
+    def save_failed_run(
+        self,
+        payload: Dict[str, Any],
+        run_id: str,
+        snapshot: Dict[str, Any],
+        error: str,
+        started_at: str,
+        total_duration_ms: int,
+    ) -> None:
+        """Persist a failed run so restarts and completion-rate metrics do not hide it."""
+        state = self._initial_state(payload, run_id)
+        state.update(snapshot)
+        state["run_id"] = run_id
+        state["errors"] = list(state.get("errors") or []) + [error]
+        state["error"] = error
+        state["run_metrics"] = build_run_metrics(
+            state,
+            started_at=started_at,
+            completed_at=utc_now_iso(),
+            total_duration_ms=total_duration_ms,
+        )
+        self.runs.save(state, status="failed")
 
     def price_preview(self, asset_input: str, query: str = "") -> Dict[str, Any]:
         asset = resolve_asset(asset_input, query)
@@ -162,6 +199,15 @@ class AgentService:
 
     def history(self, limit: int = 20):
         return self.runs.list_runs(limit)
+
+    def observability(self, limit: int = 50):
+        rows = self.runs.list_runs(limit)
+        records = []
+        for row in rows:
+            saved = self.runs.get(row["run_id"])
+            if saved:
+                records.append(saved)
+        return aggregate_run_metrics(records)
 
     def saved_run(self, run_id: str):
         return self.runs.get(run_id)

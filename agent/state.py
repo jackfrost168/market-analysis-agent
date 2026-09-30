@@ -31,6 +31,7 @@ class AgentState(TypedDict, total=False):
     thesis_graph: Dict[str, Any]
     verification: Dict[str, Any]
     report: Dict[str, Any]
+    run_metrics: Dict[str, Any]
     next_step: str
 
     node_trace: Annotated[List[Dict[str, Any]], operator.add]

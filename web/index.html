@@ -112,6 +112,7 @@
               <p id="verificationNotice" class="verification-notice"></p>
             </section>
             <article class="narrative-card"><p class="reason-title">Why this view</p><ul id="whyList" class="clean-list"></ul><p class="future-label">What to watch next</p><p id="futureExpectation" class="future-copy"></p></article>
+            <section class="decision-brief-section" aria-label="Decision-oriented insights"><div class="subsection-heading"><p class="section-label">Forward-looking synthesis</p><h3>Useful signals, not a longer summary</h3></div><article class="prompt-card decision-brief-card"><p class="reason-title">Key insight</p><strong id="keyInsight">--</strong><p id="keyInsightWhy" class="detail-copy"></p><div id="watchItems" class="watch-item-grid"></div><p class="future-label">Next research action</p><p id="nextResearchAction" class="future-copy"></p></article></section>
             <section><div class="subsection-heading"><p class="section-label">Calculated in Python</p><h3>Market &amp; financial signals</h3></div><div id="signalGrid" class="signal-grid"></div></section>
             <section><div class="subsection-heading"><p class="section-label">Evidence diagnostics</p><h3>How well is this answer supported?</h3></div><p class="field-hint">Rule-based indicators of evidence and references. These scores have not been calibrated as prediction accuracy or investment success probabilities.</p><div id="scoreGrid" class="score-grid"></div></section>
 
@@ -135,6 +136,6 @@
     <details class="panel architecture-panel interview-architecture"><summary>Under the hood: the nine-node LangGraph workflow</summary><p class="support-text">The four stages group nine execution nodes. Evidence gaps return to targeted retrieval, with a shared retry budget. A completed report may still carry limitations.</p><div id="architectureFlow" class="architecture-flow" aria-label="Agent workflow"></div></details>
     <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=20260930-1"></script>
 </body>
 </html>

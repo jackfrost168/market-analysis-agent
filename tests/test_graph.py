@@ -206,6 +206,9 @@ class GraphIntegrationTests(unittest.TestCase):
                 state["report"]["agent_proof"]["actual_nodes_executed"],
                 visited,
             )
+            self.assertIn("observability", state["report"])
+            self.assertEqual(state["report"]["observability"]["model_calls"]["total"], 3)
+            self.assertTrue(state["report"]["decision_brief"]["watch_items"])
             reopened = AgentService(Path(directory), llm=OfflineLlm(), research_tools=FixtureResearchTools())
             saved = reopened.runs.get(state["run_id"])
             self.assertEqual(saved["report"], state["report"])

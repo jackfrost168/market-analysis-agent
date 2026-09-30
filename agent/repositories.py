@@ -63,7 +63,10 @@ class RunRepository:
                 (
                     state.get("run_id"),
                     state.get("conversation_id") or state.get("run_id"),
-                    (state.get("report") or {}).get("generated_at") or task.get("as_of") or "",
+                    (state.get("report") or {}).get("generated_at")
+                    or (state.get("run_metrics") or {}).get("completed_at")
+                    or task.get("as_of")
+                    or "",
                     state.get("user_query") or "",
                     task.get("symbol"),
                     task.get("task_type"),
