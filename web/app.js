@@ -51,6 +51,28 @@ function metricCard(label, value, unit, detail) {
   return `<article class="evaluation-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(display)}${hasValue && unit === "%" ? "%" : ""}</strong><small>${escapeHtml(unit === "%" ? detail : `${unit} · ${detail}`)}</small></article>`;
 }
 
+function hideRunMetrics() {
+  $("evaluationPanel").hidden = true;
+  $("runMetrics").innerHTML = "";
+  $("evaluationMetrics").innerHTML = "";
+  $("serviceMetrics").innerHTML = "";
+}
+
+function showRunMetrics(report, replay = false) {
+  const usage = report.observability?.model_calls || {};
+  const elapsed = report.observability?.total_duration_ms;
+  const evidence = report.evidence || [];
+  $("runMetricsMeta").textContent = `${replay ? "Saved run" : "Just completed"} · ${formatTimestamp(report.generated_at)} · ${report.run_id || "Run ID unavailable"}`;
+  $("runMetrics").innerHTML = [
+    metricCard("Runtime", elapsed == null ? null : elapsed / 1000, "seconds", "End-to-end analysis time"),
+    metricCard("Model calls", usage.total, "calls", "Calls recorded for this run"),
+    metricCard("Token usage", usage.total_tokens, "tokens", "Recorded model token usage"),
+    metricCard("Evidence collected", evidence.length, "items", "Normalized evidence in this report"),
+  ].join("");
+  $("evaluationPanel").hidden = false;
+  loadMetricsDashboard();
+}
+
 async function loadMetricsDashboard() {
   const button = $("refreshMetricsButton");
   button.disabled = true;
@@ -376,6 +398,7 @@ function renderLiveAudit(run = {}) {
 function beginRunUi() {
   setBusy(true);
   displayedReport = null;
+  hideRunMetrics();
   clearInterval(elapsedTimer);
   const started = Date.now();
   $("runElapsed").textContent = "0s elapsed";
@@ -698,6 +721,7 @@ function renderExecutionBrief(report) {
 
 function renderReport(report, trace = [], { replay = false } = {}) {
   displayedReport = { report, replay };
+  showRunMetrics(report, replay);
   const task = report.task_summary || {};
   const situation = report.current_situation || {};
   const scores = report.confidence_scores || {};
@@ -827,7 +851,6 @@ async function submitAnalysis(event) {
     renderReport(run.report || {}, run.node_trace || []);
     finishRunUi(true, `Report ready. ${run.node_trace?.length || 0} node executions recorded; inspect the evidence checks below.`);
     loadHistory();
-    loadMetricsDashboard();
     $("reportContent").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     finishRunUi(false, error.message);
@@ -839,6 +862,7 @@ function resetOutput() {
   if (isBusy) return;
   activeRunId = null;
   displayedReport = null;
+  hideRunMetrics();
   $("resultContent").classList.add("hidden");
   $("resultEmpty").classList.remove("hidden");
   $("statusPill").className = "status-pill neutral";
@@ -870,12 +894,6 @@ async function loadHistory() {
     historyLoading = false;
     $("refreshHistoryButton").disabled = false;
     $("replayButton").disabled = isBusy || !$("savedRunSelect").value;
-    // A browser refresh clears the in-memory view, but completed reports are
-    // persisted on the server. Restore the newest one so the page cannot look
-    // stuck in the previous progress panel after a completed run.
-    if (!displayedReport && !isBusy && $("savedRunSelect").value) {
-      replaySavedRun();
-    }
   }
 }
 
@@ -1007,7 +1025,6 @@ document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
   loadModels();
   loadHistory();
-  loadMetricsDashboard();
   loadArchitecture();
   fetchPrice($("asset").value);
 });

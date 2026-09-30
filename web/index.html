@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=20260930-3">
   <link rel="stylesheet" href="/presentation.css">
 </head>
 <body>
@@ -82,17 +82,8 @@
         <div class="replay-actions"><select id="savedRunSelect" aria-label="Saved reports"><option value="">Loading...</option></select><button id="replayButton" class="secondary-button" type="button" disabled>Replay</button><button id="refreshHistoryButton" class="ghost-button compact" type="button">Refresh list</button></div>
       </section>
 
-      <section class="panel evaluation-panel" aria-label="Agent evaluation dashboard">
-        <div class="panel-heading"><div><p class="section-label">02 / Measure</p><h2>How the agent performs</h2></div><button id="refreshMetricsButton" class="ghost-button compact" type="button">Refresh metrics</button></div>
-        <p class="field-hint">Benchmark scores come from labelled test questions. Runtime totals come from saved production runs. A blank score means it has not been measured.</p>
-        <div class="metrics-section-head"><strong>Labelled benchmark</strong><span id="evaluationMeta" class="field-hint">Loading benchmark results...</span></div>
-        <div id="evaluationMetrics" class="evaluation-metrics" aria-live="polite"></div>
-        <div class="metrics-section-head"><strong>Live service</strong><span id="serviceMetricsMeta" class="field-hint">Loading saved run statistics...</span></div>
-        <div id="serviceMetrics" class="evaluation-metrics compact" aria-live="polite"></div>
-      </section>
-
       <section class="panel result-panel">
-        <div class="panel-heading"><div><p class="section-label">03 / Inspect</p><h2>The answer, with its evidence.</h2></div><span id="statusPill" class="status-pill neutral">Waiting for input</span></div>
+        <div class="panel-heading"><div><p class="section-label">02 / Inspect</p><h2>The answer, with its evidence.</h2></div><span id="statusPill" class="status-pill neutral">Waiting for input</span></div>
         <div id="resultEmpty" class="result-empty"><p>Choose an example or ask your own question. Decisions, tool calls, and evidence will appear here.</p></div>
         <div id="resultContent" class="result-content hidden">
           <div id="analysisStateBanner" class="analysis-state-banner idle" role="status">Waiting for a fresh run.</div>
@@ -141,10 +132,22 @@
           </div>
         </div>
       </section>
+      <section id="evaluationPanel" class="panel evaluation-panel" aria-label="Agent evaluation dashboard" hidden>
+        <div class="panel-heading"><div><p class="section-label">03 / Measure</p><h2>How this run performed</h2></div><button id="refreshMetricsButton" class="ghost-button compact" type="button">Refresh metrics</button></div>
+        <p id="runMetricsMeta" class="field-hint"></p>
+        <div id="runMetrics" class="evaluation-metrics run-metrics" aria-live="polite"></div>
+        <details class="evaluation-context"><summary>Compare with labelled benchmark and saved runs</summary>
+          <p class="field-hint">These aggregate scores are historical context, not an evaluation of this question.</p>
+          <div class="metrics-section-head"><strong>Labelled benchmark</strong><span id="evaluationMeta" class="field-hint">Loading benchmark results...</span></div>
+          <div id="evaluationMetrics" class="evaluation-metrics" aria-live="polite"></div>
+          <div class="metrics-section-head"><strong>Saved run statistics</strong><span id="serviceMetricsMeta" class="field-hint">Loading saved run statistics...</span></div>
+          <div id="serviceMetrics" class="evaluation-metrics compact" aria-live="polite"></div>
+        </details>
+      </section>
     </main>
     <details class="panel architecture-panel interview-architecture"><summary>Under the hood: the nine-node LangGraph workflow</summary><p class="support-text">The four stages group nine execution nodes. Evidence gaps return to targeted retrieval, with a shared retry budget. A completed report may still carry limitations.</p><div id="architectureFlow" class="architecture-flow" aria-label="Agent workflow"></div></details>
     <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
-  <script type="module" src="/app.js?v=20260930-2"></script>
+  <script type="module" src="/app.js?v=20260930-3"></script>
 </body>
 </html>
