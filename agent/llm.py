@@ -141,10 +141,13 @@ class OllamaClient:
         if self.model_routes:
             models = []
             inventories = {}
+            bedrock_status = None
             for name, route in self.model_routes.items():
                 if route.get("provider") == "bedrock":
                     from .bedrock import credential_status
-                    status = credential_status()
+                    if bedrock_status is None:
+                        bedrock_status = credential_status()
+                    status = bedrock_status
                     models.append({"name": name, "label": route.get("label") or name,
                                    "provider": "bedrock", **status})
                     continue

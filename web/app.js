@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-bedrock1";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-bedrock2";
 
 const NODE_ORDER = [
   "understand_request",
@@ -301,7 +301,8 @@ async function loadModels() {
     select.innerHTML = "";
     const auto = document.createElement("option");
     auto.value = "auto";
-    auto.textContent = `Auto (${payload.auto_selected || "best available"})`;
+    const defaultLabel = (payload.models || []).find(model => model.name === payload.auto_selected)?.label || payload.auto_selected;
+    auto.textContent = `Auto (${defaultLabel || "best available"})`;
     auto.disabled = payload.default_available === false;
     select.append(auto);
     for (const model of payload.models || []) {

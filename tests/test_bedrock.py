@@ -66,6 +66,39 @@ class BedrockTests(unittest.TestCase):
         self.assertEqual(config.retries["total_max_attempts"], 1)
         self.assertEqual(config.connect_timeout + config.read_timeout, 15)
 
+    def test_low_cost_models_use_their_own_rates_and_keep_qwen_default(self):
+        rates = {"amazon.nova-micro-v1:0": 0.000245,
+                 "amazon.nova-lite-v1:0": 0.00042,
+                 "google.gemma-3-4b-it": 0.0002,
+                 "google.gemma-3-12b-it": 0.00056}
+        routes = json.loads(ROUTES)
+        for model in rates:
+            routes[model] = {"provider": "bedrock", "region": "us-east-1"}
+        with patch.dict(os.environ, {"OLLAMA_MODEL_ROUTES": json.dumps(routes)}):
+            llm = OllamaClient()
+            self.assertEqual(llm.choose_model("auto"), DEFAULT_MODEL)
+            for model, cost in rates.items():
+                with self.subTest(model=model):
+                    sdk = Mock()
+                    sdk.converse.return_value = response('```json\n{"ok":true}\n```')
+                    with patch("agent.bedrock.runtime_client", return_value=sdk):
+                        result = llm.generate_structured("fixture", Answer, model=model)
+                    self.assertTrue(result.success)
+                    self.assertEqual(result.model, model)
+                    self.assertEqual(result.metered_api_cost_usd, cost)
+                    request = sdk.converse.call_args.kwargs
+                    self.assertNotIn("/no_think", request["messages"][0]["content"][0]["text"])
+                    self.assertEqual(request["inferenceConfig"]["maxTokens"], 4096)
+
+    def test_nova_output_cap_respects_model_limit(self):
+        from agent.bedrock import generate_bedrock
+        sdk = Mock()
+        sdk.converse.return_value = response()
+        with patch("agent.bedrock.runtime_client", return_value=sdk):
+            result = generate_bedrock("fixture", Answer, "amazon.nova-micro-v1:0", {}, temperature=0, timeout_seconds=30, max_output_tokens=8192)
+        self.assertTrue(result.success)
+        self.assertEqual(sdk.converse.call_args.kwargs["inferenceConfig"]["maxTokens"], 5000)
+
     def test_invalid_json_still_records_billable_usage(self):
         sdk = Mock()
         sdk.converse.return_value = response('{"ok":"invalid"}')

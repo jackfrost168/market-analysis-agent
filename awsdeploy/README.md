@@ -95,7 +95,7 @@ AWS 本机 Ollama 使用 `127.0.0.1:11435`，原 Mac SSH 转发保留 `127.0.0.1
 
 ## AWS Bedrock Converse 默认模型与费用
 
-当前提供 **Qwen3 32B (AWS Bedrock Converse，默认)** 和 **Qwen3 8B (Mac)**。阿里云外部 API 8B/30B 和其密钥录入脚本已经移除；不添加 Coder。九节点工作流、检索、验证、可选反事实检查与报告主体不变。
+当前提供 **Qwen3 32B (AWS Bedrock Converse，默认)**、**Nova Micro**、**Nova Lite**、**Gemma 3 4B**、**Gemma 3 12B** 和 **Qwen3 8B (Mac)**。阿里云外部 API 8B/30B 和其密钥录入脚本已经移除；不添加 Coder。九节点工作流、检索、验证、可选反事实检查与报告主体不变。
 
 ### 服务器配置
 
@@ -103,17 +103,17 @@ AWS 本机 Ollama 使用 `127.0.0.1:11435`，原 Mac SSH 转发保留 `127.0.0.1
 
 ```dotenv
 OLLAMA_MODEL=qwen.qwen3-32b-v1:0
-OLLAMA_MODEL_ROUTES='{"qwen.qwen3-32b-v1:0":{"provider":"bedrock","region":"us-east-1","label":"Qwen3 32B (AWS Bedrock Converse)"},"qwen3:8b":{"base_url":"http://127.0.0.1:11434","label":"Qwen3 8B (Mac)"}}'
+OLLAMA_MODEL_ROUTES='{"qwen.qwen3-32b-v1:0":{"provider":"bedrock","region":"us-east-1","label":"Qwen3 32B (AWS Bedrock Converse)"},"amazon.nova-micro-v1:0":{"provider":"bedrock","region":"us-east-1","label":"Nova Micro (AWS Bedrock Converse)"},"amazon.nova-lite-v1:0":{"provider":"bedrock","region":"us-east-1","label":"Nova Lite (AWS Bedrock Converse)"},"google.gemma-3-4b-it":{"provider":"bedrock","region":"us-east-1","label":"Gemma 3 4B (AWS Bedrock Converse)"},"google.gemma-3-12b-it":{"provider":"bedrock","region":"us-east-1","label":"Gemma 3 12B (AWS Bedrock Converse)"},"qwen3:8b":{"base_url":"http://127.0.0.1:11434","label":"Qwen3 8B (Mac)"}}'
 BEDROCK_REGION=us-east-1
-BEDROCK_PRICING_JSON='{"qwen.qwen3-32b-v1:0":{"input":0.15,"output":0.60}}'
+BEDROCK_PRICING_JSON='{"qwen.qwen3-32b-v1:0":{"input":0.15,"output":0.6},"amazon.nova-micro-v1:0":{"input":0.035,"output":0.14},"amazon.nova-lite-v1:0":{"input":0.06,"output":0.24},"google.gemma-3-4b-it":{"input":0.04,"output":0.08},"google.gemma-3-12b-it":{"input":0.09,"output":0.29}}'
 ```
 
-调用 SDK 的 bedrock-runtime.converse，使用 Qwen 原生模型 ID qwen.qwen3-32b-v1:0。Schema 放入提示词，回复继续由 Pydantic 校验。使用 /no_think 软指令请求非思考回复，不把它描述成服务端强制开关；服务商返回的全部输出 tokens（包括可能的推理 tokens）均计费。普通调用最多 4096 输出 tokens，反事实调用保留原 512 tokens 与时间预算。SDK 不自动重试，不因 Bedrock 失败改用另一个提供商；原工作流已有的确定性 fallback 仍保留并记录失败。
+调用 SDK 的 bedrock-runtime.converse，使用 Qwen 原生模型 ID qwen.qwen3-32b-v1:0。Schema 放入提示词，回复继续由 Pydantic 校验。仅 Qwen 使用 /no_think 软指令请求非思考回复；Nova 和 Gemma 不发送此指令，不把它描述成服务端强制开关；服务商返回的全部输出 tokens（包括可能的推理 tokens）均计费。普通调用最多 4096 输出 tokens，反事实调用保留原 512 tokens 与时间预算。SDK 不自动重试，不因 Bedrock 失败改用另一个提供商；原工作流已有的确定性 fallback 仍保留并记录失败。
 
 ### 绑定 EC2 IAM 角色
 
 1. AWS 控制台 → IAM → Roles → Create role → AWS service → EC2，创建 FinancialAgentBedrockConverse 角色。
-2. 在角色中添加 inline policy，使用同目录 bedrock-invoke-policy.json 的 JSON。它仅允许 bedrock:InvokeModel 到 us-east-1 的 Qwen3-32B；这是 Converse 所需权限，不给 EC2 管理 IAM 的权限。
+2. 在角色中添加 inline policy，使用同目录 bedrock-invoke-policy.json 的 JSON。它仅允许 bedrock:InvokeModel 到 us-east-1 的上述五个模型；这是 Converse 所需权限，不给 EC2 管理 IAM 的权限。
 3. EC2 控制台 → us-east-1 → 找到当前 financial-agent 实例 → Actions → Security → Modify IAM role → 绑定上述角色。
 4. 如果首次调用提示模型订阅/访问问题，用有账户管理权限的用户打开 Bedrock Model catalog，确认 Qwen3-32B 的账户访问及计费条件。不要创建 provisioned throughput 或自部署 Marketplace 端点；本项目使用原生按量推理。
 5. 在 Mac 终端执行：
@@ -124,7 +124,7 @@ cd /home/ec2-user/financial-agent
 .venv/bin/python awsdeploy/check_bedrock.py
 ```
 
-此脚本会发一次极短的真实模型请求，按量计费；success:true 表示 SDK、IAM、模型访问及结构化回复已验证。不写入分析数据库，不输出凭证。IAM 角色绑定不要求重启 EC2；页面刷新即可重新检查凭证来源。/api/models 的 credentials_configured 仅表示 SDK 找到凭证，不代表模型权限已确认。
+此脚本默认向 Qwen3-32B 发一次极短的真实模型请求；加 --all 可依次验证全部五个模型，按量计费；success:true 表示 SDK、IAM、模型访问及结构化回复已验证。不写入分析数据库，不输出凭证。IAM 角色绑定不要求重启 EC2；页面刷新即可重新检查凭证来源。/api/models 的 credentials_configured 仅表示 SDK 找到凭证，不代表模型权限已确认。
 
 缺少角色时 API 选项显示 AWS IAM role required，提交 Auto 在入队前被拒绝。仍可手动选 Mac 8B；Mac Ollama 与 SSH 隧道需在线。真实推理的 AccessDenied、超时或输出校验错误显示在 LLM calls 中。
 
@@ -139,3 +139,17 @@ cd /home/ec2-user/financial-agent
 单价为 us-east-1 标准按量推理：每百万输入 $0.15，输出 $0.60（2026-10-09 查询，官方价目发布于 2026-10-06）。更换区域、模型或服务层级时修改 BEDROCK_PRICING_JSON。当前代码仅请求标准推理，不开启 prompt cache 或 Flex；不能套用其折扣单价。
 
 参考：[模型 ID 与区域](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-qwen-qwen3-32b.html)、[Converse 接口](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)、[官方区域价格数据](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/us-east-1/index.json)。
+
+### 低价模型选项
+
+所有模型由用户在 Model 中手动选择，Auto 始终使用 Qwen3-32B；不混用不同模型、不自动按成本切换。Nova 和 Gemma 复用现有 JSON Schema 提示与 Pydantic 校验，Gemma 返回的 JSON 代码围栏由现有解析器处理。普通分析输出上限仍为 4096 tokens，反事实检查为 512；Nova 的显式输出上限额外限制在模型支持的 5000 内。
+
+| 模型 | 输入美元 / 百万 tokens | 输出美元 / 百万 tokens |
+|---|---:|---:|
+| Qwen3-32B | 0.15 | 0.60 |
+| Nova Micro | 0.035 | 0.14 |
+| Nova Lite | 0.06 | 0.24 |
+| Gemma 3 4B | 0.04 | 0.08 |
+| Gemma 3 12B | 0.09 | 0.29 |
+
+费率均为 us-east-1 标准按量价；Converse 返回的实际 usage 乘所选模型的费率，历史报告不改价。新增模型的完整任务表现不应直接套用原有 14 条 labelled benchmark 的准确率。

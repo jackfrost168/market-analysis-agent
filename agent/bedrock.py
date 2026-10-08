@@ -16,7 +16,13 @@ from .llm import StructuredResult, _clean_json_text
 
 DEFAULT_MODEL = "qwen.qwen3-32b-v1:0"
 DEFAULT_REGION = "us-east-1"
-DEFAULT_PRICING = {DEFAULT_MODEL: {"input": 0.15, "output": 0.60}}
+DEFAULT_PRICING = {
+    DEFAULT_MODEL: {"input": 0.15, "output": 0.60},
+    "amazon.nova-micro-v1:0": {"input": 0.035, "output": 0.14},
+    "amazon.nova-lite-v1:0": {"input": 0.06, "output": 0.24},
+    "google.gemma-3-4b-it": {"input": 0.04, "output": 0.08},
+    "google.gemma-3-12b-it": {"input": 0.09, "output": 0.29},
+}
 
 
 def credential_status() -> Dict[str, Any]:
@@ -78,12 +84,14 @@ def generate_bedrock(prompt: str, response_model: Type[BaseModel], selected_mode
     try:
         pricing = pricing_for(model_id, region)
         schema = json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        thinking_hint = " /no_think" if model_id.startswith("qwen.") else ""
+        output_limit = 5000 if model_id.startswith("amazon.nova-") else 8192
         body = runtime_client(region, timeout_seconds).converse(
             modelId=model_id,
-            system=[{"text": "Return exactly one JSON object matching this JSON Schema. No markdown or extra text. /no_think\n" + schema}],
-            messages=[{"role": "user", "content": [{"text": prompt + "\n/no_think"}]}],
+            system=[{"text": "Return exactly one JSON object matching this JSON Schema. No markdown or extra text." + thinking_hint + "\n" + schema}],
+            messages=[{"role": "user", "content": [{"text": prompt + ("\n/no_think" if thinking_hint else "")}]}],
             inferenceConfig={"temperature": max(0.0, min(float(temperature), 1.0)),
-                             "maxTokens": max(1, min(int(max_output_tokens or 4096), 8192))},
+                             "maxTokens": max(1, min(int(max_output_tokens or 4096), output_limit))},
         )
         raw_text = "".join(block.get("text", "") for block in body["output"]["message"]["content"])
         if body.get("stopReason") not in {"end_turn", "stop_sequence"}:

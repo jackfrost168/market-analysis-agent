@@ -2,10 +2,16 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "FinancialAgentQwen32BConverse",
+      "Sid": "FinancialAgentConverseModels",
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:us-east-1::foundation-model/qwen.qwen3-32b-v1:0"
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/qwen.qwen3-32b-v1:0",
+        "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0",
+        "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:us-east-1::foundation-model/google.gemma-3-4b-it",
+        "arn:aws:bedrock:us-east-1::foundation-model/google.gemma-3-12b-it"
+      ]
     }
   ]
 }
