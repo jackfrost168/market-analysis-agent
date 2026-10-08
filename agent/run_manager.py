@@ -84,7 +84,7 @@ class RunManager:
             }
             if (state.get("counterfactual_tests") or {}).get("status") == "running":
                 snapshot["current_node"] = "counterfactual_evidence_test"
-                snapshot["message"] = "Testing evidence dependency after analysis..."
+                snapshot["message"] = "正在执行反事实证据测试 / Counterfactual Evidence Test：逐项移除证据，检查原结论是否仍有支持。"
             with self._lock:
                 snapshot["revision"] = self._runs[run_id].get("revision", 0) + 1
                 self._runs[run_id].update(snapshot)

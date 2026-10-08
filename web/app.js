@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261008-cf2";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261008-cf3";
 
 const NODE_ORDER = [
   "understand_request",
@@ -22,7 +22,7 @@ const NODE_LABELS = {
   generate_thesis_graph: "Generate thesis graph",
   verify_and_calibrate: "Verify & calibrate",
   build_report: "Build report",
-  counterfactual_evidence_test: "Counterfactual Evidence Test",
+  counterfactual_evidence_test: "反事实证据测试 / Counterfactual Evidence Test",
 };
 
 const SOURCE_LABELS = {
@@ -128,6 +128,29 @@ let isBusy = false;
 let displayedReport = null;
 let elapsedTimer = null;
 let historyLoading = false;
+let counterfactualSettings = null;
+let counterfactualChoiceEdited = false;
+
+function updateCounterfactualChoiceStatus() {
+  const selected = $("enableCounterfactualEvidenceTest").checked;
+  const server = counterfactualSettings ? `服务器默认：${counterfactualSettings.default_enabled ? "开启" : "关闭"}；` : "";
+  $("counterfactualOptionStatus").textContent = selected
+    ? `${server}本次开启。${counterfactualSettings ? `最多 ${counterfactualSettings.max_claims} 个结论、每个 ${counterfactualSettings.max_evidence} 项证据；增加至多 ${counterfactualSettings.max_added_model_calls} 次模型调用，总时间预算 ${counterfactualSettings.budget_seconds} 秒。` : "将增加模型调用。"}模型繁忙时可能等待或超时。`
+    : `${server}本次关闭，不增加反事实检查的模型调用。报告中仍会显示是否有测试记录。`;
+}
+
+async function loadCounterfactualSettings() {
+  try {
+    const response = await fetch("/api/counterfactual/status", { cache: "no-store" });
+    if (!response.ok) throw new Error("Counterfactual settings unavailable");
+    counterfactualSettings = await response.json();
+    if (!counterfactualChoiceEdited && !isBusy) $("enableCounterfactualEvidenceTest").checked = counterfactualSettings.default_enabled === true;
+    updateCounterfactualChoiceStatus();
+  } catch (_) {
+    updateCounterfactualChoiceStatus();
+    $("counterfactualOptionStatus").textContent += " 服务默认配置暂时无法读取；本次按上方勾选状态执行。";
+  }
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -486,6 +509,7 @@ function renderLiveAudit(run = {}) {
 function beginRunUi() {
   setBusy(true);
   displayedReport = null;
+  $("counterfactualResultButton").disabled = true;
   hideRunMetrics();
   clearInterval(elapsedTimer);
   const started = Date.now();
@@ -924,23 +948,32 @@ function renderReport(report, trace = [], { replay = false } = {}) {
 
 function renderCounterfactual(result) {
   const section = $("counterfactualSection");
-  section.classList.toggle("hidden", !result);
-  section.innerHTML = "";
-  if (!result) return;
+  section.classList.remove("hidden");
+  $("counterfactualResultButton").disabled = false;
+  const heading = '<div class="subsection-heading"><p class="section-label">Counterfactual Evidence Test</p><h3>反事实证据测试</h3></div>';
+  const note = '<p class="field-hint">移除一条证据后，同一个结论是否仍然成立？下列等级表示证据依赖程度，不是经过校准的概率。</p>';
+  if (!result) {
+    section.innerHTML = `${heading}${note}<article class="prompt-card"><p class="counterfactual-status">本报告未记录反事实证据测试</p><p class="detail-copy">本次未开启，或报告来自加入功能前。勾选上方“反事实证据测试”，再提交新的分析，才能得到该检查的结果。</p></article>`;
+    return;
+  }
+  const timedOut = (result.errors || []).some(error => /timed out|timeout|budget exhausted/i.test(error));
+  const labels = { completed: "已完成", partial: "部分完成", skipped: "未执行", unavailable: timedOut ? "超时，未得到测试结果" : "检查失败，未得到测试结果", running: "执行中" };
+  const importance = { Critical: "关键证据（Critical）", Important: "重要证据（Important）", Supporting: "辅助证据（Supporting）" };
+  const support = { strong: "强", moderate: "中", weak: "弱", unsupported: "无支持" };
+  const impact = { high: "高", medium: "中", low: "低" };
   const claims = (result.claims || []).map(claim => `<article class="prompt-card">
-    <p class="reason-title">Claim</p><strong>${escapeHtml(claim.claim)}</strong>
+    <p class="reason-title">被检验的结论</p><strong>${escapeHtml(claim.claim)}</strong>
     <ul class="clean-list">${(claim.evidence || []).map(item => `<li>
-      ${escapeHtml(item.title)} → <b>${escapeHtml(item.importance || "Not evaluated")}</b>
+      ${escapeHtml(item.title)} → <b>${escapeHtml(importance[item.importance] || "未评估")}</b>
       ${evidenceReferences([item.evidence_id])}
     </li>`).join("")}</ul><p class="detail-copy">${escapeHtml(claim.explanation || "")}</p>
-    <details><summary>Support changes</summary><ul class="clean-list">${(claim.evidence || []).map(item => `<li>
-      ${escapeHtml(item.title)}: ${escapeHtml(claim.original_support)} → ${escapeHtml(item.support_after || "unavailable")}
-      (${escapeHtml(item.impact || "unavailable")} impact). ${escapeHtml(item.reason || "")}
+    <details><summary>删除证据后的支持变化与判断理由</summary><ul class="clean-list">${(claim.evidence || []).map(item => `<li>
+      ${escapeHtml(item.title)}：${escapeHtml(support[claim.original_support] || "未知")} → ${escapeHtml(support[item.support_after] || "未评估")}
+      （${escapeHtml(impact[item.impact] || "未评估")}影响）。${escapeHtml(item.reason || "")}
     </li>`).join("")}</ul></details></article>`).join("");
-  section.innerHTML = `<div class="subsection-heading"><p class="section-label">Evidence dependency</p>
-    <h3>Counterfactual Evidence Test</h3></div><p class="field-hint">${escapeHtml(result.note || "")}</p>
-    ${claims || '<p class="detail-copy">No evidence dependency could be evaluated.</p>'}
-    ${result.status !== "completed" ? `<p class="field-hint">${escapeHtml(result.status)}: ${escapeHtml((result.errors || []).join("; "))}</p>` : ""}`;
+  section.innerHTML = `${heading}${note}<p class="counterfactual-status" role="status">${escapeHtml(labels[result.status] || "状态未知")}</p>
+    ${claims || `<article class="prompt-card"><p class="detail-copy">${timedOut ? "模型未在时间上限内返回有效结果；没有为证据分配重要性等级。" : "本次没有可用的证据重要性结果。"}</p></article>`}
+    ${(result.errors || []).length ? `<details><summary>查看检查错误</summary><p class="detail-copy">${escapeHtml(result.errors.join("; "))}</p></details>` : ""}`;
 }
 
 async function submitAnalysis(event) {
@@ -958,6 +991,7 @@ async function submitAnalysis(event) {
     horizon: $("horizon").value,
     query: $("query").value.trim(),
     model: $("llmModel").value,
+    enable_counterfactual_evidence_test: $("enableCounterfactualEvidenceTest").checked,
     prediction_provider: $("predictionProvider").value,
     temperature: Number($("temperatureSlider").value) / 100,
     max_retries: Number($("maxRetries").value),
@@ -990,6 +1024,7 @@ function resetOutput() {
   if (isBusy) return;
   activeRunId = null;
   displayedReport = null;
+  $("counterfactualResultButton").disabled = true;
   hideRunMetrics();
   $("resultContent").classList.add("hidden");
   $("resultEmpty").classList.remove("hidden");
@@ -1102,6 +1137,8 @@ async function loadArchitecture() {
 }
 
 function bindEvents() {
+  $("enableCounterfactualEvidenceTest").addEventListener("change", () => { counterfactualChoiceEdited = true; updateCounterfactualChoiceStatus(); });
+  $("counterfactualResultButton").addEventListener("click", () => { if (displayedReport) $("counterfactualSection").scrollIntoView({ behavior: "smooth", block: "start" }); });
   $("reportContent").addEventListener("click", event => {
     const reference = event.target.closest("button[data-evidence-id]");
     if (reference) openReferencedEvidence(reference.dataset.evidenceId);
@@ -1163,6 +1200,7 @@ document.addEventListener("DOMContentLoaded", () => {
   queryWasEdited = true;
   bindEvents();
   loadModels();
+  loadCounterfactualSettings();
   loadHistory();
   loadArchitecture();
   fetchPrice($("asset").value);

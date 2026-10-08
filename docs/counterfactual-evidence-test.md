@@ -6,7 +6,19 @@ not causal effects, prediction probabilities, or proof that a financial claim is
 
 ## Enable
 
-Set these environment variables on the process that runs the Agent and restart it:
+On the website, the always-visible **反事实证据测试 / Counterfactual Evidence Test**
+checkbox below the question enables this check for the next analysis. Leave it
+unchecked to avoid additional calls. The adjacent text shows the server default
+and per-run choice, and a result shortcut scrolls to the report section. Historical
+reports without this field display “本报告未记录反事实证据测试”; failed checks display
+their status instead of hiding the whole section.
+
+API callers can pass `enable_counterfactual_evidence_test: true` or `false` in
+`POST /api/runs` or `POST /api/analyze`. An explicit choice overrides the environment
+default **for that request only**. Omit the field to follow the environment setting.
+`GET /api/counterfactual/status` exposes the default and limits without model calls.
+
+To change the server default, set these environment variables and restart it:
 
 ```sh
 ENABLE_COUNTERFACTUAL_EVIDENCE_TEST=true

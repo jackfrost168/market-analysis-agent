@@ -52,6 +52,8 @@ class AgentService:
         self.runs = RunRepository(self.data_dir / "agent_runs.sqlite3")
 
     def _initial_state(self, payload: Dict[str, Any], run_id: str) -> Dict[str, Any]:
+        if "enable_counterfactual_evidence_test" in payload:
+            counterfactual_enabled(payload["enable_counterfactual_evidence_test"])
         asset_input = str(payload.get("asset") or payload.get("asset_input") or "").strip()
         user_query = str(payload.get("query") or payload.get("question") or "").strip()
         if not user_query:
@@ -118,7 +120,7 @@ class AgentService:
             if progress_callback:
                 progress_callback(snapshot)
         # Optional post-analysis hook: leave all graph nodes, routes and the original thesis intact.
-        if counterfactual_enabled() and final_state.get("report"):
+        if counterfactual_enabled(payload.get("enable_counterfactual_evidence_test")) and final_state.get("report"):
             final_state["counterfactual_tests"] = {"status": "running"}
             if progress_callback:
                 progress_callback(final_state)

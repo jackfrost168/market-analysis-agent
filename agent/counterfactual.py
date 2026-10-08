@@ -24,7 +24,11 @@ SUPPORT_ORDER = {"unsupported": 0, "weak": 1, "moderate": 2, "strong": 3}
 NOTE = "Qualitative LLM evidence-dependency judgments, not calibrated probabilities or proof of causality."
 
 
-def enabled() -> bool:
+def enabled(requested: bool | None = None) -> bool:
+    if requested is not None:
+        if not isinstance(requested, bool):
+            raise ValueError("enable_counterfactual_evidence_test must be a boolean")
+        return requested
     return os.environ.get("ENABLE_COUNTERFACTUAL_EVIDENCE_TEST", "false").lower().strip() in {"true", "1", "yes", "on"}
 
 
@@ -50,6 +54,14 @@ class Limits:
             _setting("COUNTERFACTUAL_BUDGET_SECONDS", 60, 1, 120),
             _setting("COUNTERFACTUAL_CALL_TIMEOUT_SECONDS", 15, 1, 30),
         )
+
+
+def feature_status() -> Dict[str, Any]:
+    limits = Limits.from_env()
+    return {"name": "Counterfactual Evidence Test", "default_enabled": enabled(),
+            "max_claims": limits.max_claims, "max_evidence": limits.max_evidence,
+            "budget_seconds": limits.budget_seconds,
+            "max_added_model_calls": 1 + limits.max_claims * limits.max_evidence}
 
 
 class SelectedClaim(BaseModel):

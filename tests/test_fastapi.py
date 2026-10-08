@@ -2,6 +2,8 @@ import time
 import json
 import tempfile
 import unittest
+import os
+from unittest.mock import patch
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -71,6 +73,17 @@ class FastApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/price?asset=BTC").json()["asset"], "BTC")
         self.assertEqual(self.client.get("/api/polymarket/providers").status_code, 200)
         self.assertEqual(self.client.get("/api/models").status_code, 200)
+
+    def test_counterfactual_default_is_visible_and_invalid_choice_is_rejected(self):
+        with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "false"}):
+            response = self.client.get("/api/counterfactual/status")
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.json()["default_enabled"])
+            self.assertEqual(response.json()["name"], "Counterfactual Evidence Test")
+        with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "true"}):
+            self.assertTrue(self.client.get("/api/counterfactual/status").json()["default_enabled"])
+        response = self.client.post("/api/runs", json={"asset": "BTC", "enable_counterfactual_evidence_test": "invalid"})
+        self.assertEqual(response.status_code, 422)
 
     def test_async_run_and_audit_keep_existing_contract(self):
         response = self.client.post("/api/runs", json={"asset": "BTC", "query": "Bitcoin outlook"})

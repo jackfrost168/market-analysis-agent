@@ -220,6 +220,24 @@ class CounterfactualTests(unittest.TestCase):
             self.assertFalse(body["think"])
             self.assertEqual(request.call_args.kwargs["timeout"], 8)
 
+    def test_per_request_choice_overrides_environment_without_changing_default_runs(self):
+        class FixedGraph:
+            def stream(self, *args, **kwargs):
+                yield example_state()
+        with tempfile.TemporaryDirectory() as directory:
+            service = AgentService(Path(directory), llm=ExampleLlm())
+            service.graph = FixedGraph()
+            with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "true"}):
+                state = service.analyze({"enable_counterfactual_evidence_test": False})
+                self.assertNotIn("counterfactual_tests", state)
+                self.assertEqual(state["llm_calls"], [])
+            with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "false"}):
+                state = service.analyze({"enable_counterfactual_evidence_test": True})
+                self.assertEqual(state["counterfactual_tests"]["status"], "completed")
+                self.assertEqual(len(state["llm_calls"]), 4)
+            with self.assertRaisesRegex(ValueError, "must be a boolean"):
+                service.validate_payload({"enable_counterfactual_evidence_test": "false"}, "invalid")
+
 
 if __name__ == "__main__":
     unittest.main()

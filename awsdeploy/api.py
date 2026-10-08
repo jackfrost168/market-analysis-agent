@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
 from .bridge import AgentBridge
+from agent.counterfactual import feature_status
 
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
@@ -37,6 +38,7 @@ class AnalysisRequest(BaseModel):
     notes: str | list[str] | None = None
     headlines: str | list[str] | None = None
     conversation_id: str | None = None
+    enable_counterfactual_evidence_test: bool | None = None
 
 
 def create_app(bridge: AgentBridge | None = None, evaluation_report: Path | None = None) -> FastAPI:
@@ -68,6 +70,10 @@ def create_app(bridge: AgentBridge | None = None, evaluation_report: Path | None
     @app.get("/api/models")
     def models() -> Dict[str, Any]:
         return app.state.bridge.service.ollama_models()
+
+    @app.get("/api/counterfactual/status")
+    def counterfactual_status() -> Dict[str, Any]:
+        return feature_status()
 
     @app.get("/api/polymarket/providers")
     def prediction_providers() -> Dict[str, Any]:
