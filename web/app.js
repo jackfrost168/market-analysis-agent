@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket } from "./presentation.mjs";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261002-1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -22,6 +22,7 @@ const NODE_LABELS = {
   generate_thesis_graph: "Generate thesis graph",
   verify_and_calibrate: "Verify & calibrate",
   build_report: "Build report",
+  counterfactual_evidence_test: "Counterfactual Evidence Test",
 };
 
 const SOURCE_LABELS = {
@@ -355,18 +356,105 @@ async function loadPolymarketStatus(provider = $("predictionProvider").value) {
 
 function renderTimeline(target, trace = [], status = "completed", currentNode = null) {
   const container = typeof target === "string" ? $(target) : target;
-  const occurrences = trace.reduce((result, item) => {
-    result[item.node] = (result[item.node] || 0) + 1;
-    return result;
-  }, {});
-  container.innerHTML = NODE_ORDER.map((node, index) => {
-    const count = occurrences[node] || 0;
-    let stateClass = count ? "is-complete" : "is-pending";
-    if (status === "running" && node === currentNode) stateClass = "is-active";
-    const repeat = count > 1 ? `<em>×${count}</em>` : "";
-    const optional = node === "targeted_retrieval" ? "optional" : String(index + 1).padStart(2, "0");
-    return `<div class="node-step ${stateClass}"><span>${optional}</span><strong>${escapeHtml(NODE_LABELS[node])}</strong>${repeat}</div>`;
-  }).join("");
+  const visits = {};
+  const slowest = Math.max(1, ...trace.map(item => numericValue(item.duration_ms) ?? 0));
+  const steps = trace.map((item, index) => {
+    const visit = visits[item.node] = (visits[item.node] || 0) + 1;
+    const duration = numericValue(item.duration_ms);
+    const label = NODE_LABELS[item.node] || item.node;
+    const repeat = visit > 1 ? `<em>Visit ${visit}</em>` : "";
+    const bar = duration === null ? "" : `<span class="duration-track" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, duration / slowest * 100))}%"></i></span>`;
+    return `<details class="execution-step ${item.node === "targeted_retrieval" ? "is-retrieval" : ""}"><summary><span class="execution-index">${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(label)} ${repeat}</strong><small>${duration === null ? "Time unavailable" : `${(duration / 1000).toFixed(2)} s`}</small>${bar}</summary><p>${escapeHtml(item.summary || "No summary recorded for this node.")}</p></details>`;
+  });
+  if (["running", "queued"].includes(status) && currentNode && currentNode !== "END") {
+    steps.push(`<div class="execution-step is-active" aria-current="step"><span class="execution-index">${String(trace.length + 1).padStart(2, "0")}</span><strong>${escapeHtml(NODE_LABELS[currentNode] || currentNode)}</strong><small>${status === "queued" ? "Waiting" : "Running"}</small></div>`);
+  }
+  container.innerHTML = steps.join("") || '<div class="empty-evidence">Execution order was not recorded in this saved report.</div>';
+}
+
+const EVIDENCE_LABELS = {
+  market_price: "Current quote", price_history: "Price history", financial_statement: "Financial statements",
+  news: "Recent news", historical_news: "Historical news", crowd_expectation: "Market expectations", user_context: "User context",
+};
+const CHECK_LABELS = {
+  evidence_ids_exist: ["Evidence IDs resolve", "Referenced IDs exist in the evidence bundle."],
+  claims_have_support: ["Claims include references", "Checks for required references; does not judge semantic support."],
+  chronology_valid: ["Evidence respects the cutoff", "Checks timestamps against the analysis cutoff."],
+  yahoo_not_causal: ["Price data is not used as a cause", "Flags configured causal wording supported only by price data."],
+  polymarket_is_expectation: ["Market odds remain expectations", "Flags configured wording that treats market odds as certainty."],
+  numbers_calculated_by_python: ["Numbers are traceable", "Checks supported amounts and percentages within a bounded tolerance."],
+  target_condition_consistent: ["Target summary is consistent", "Compares the summary with the deterministic target assessment."],
+};
+const ISSUE_LABELS = {
+  unverified_numeric_claim_repaired: "Untraceable numeric claim replaced",
+  invalid_evidence_id: "Unknown evidence reference detected",
+  unsupported_claim: "Claim without required references detected",
+  momentum_used_as_fundamental_cause: "Price momentum used as a causal explanation",
+  polymarket_treated_as_fact: "Market expectation presented as fact",
+  target_summary_repaired: "Target summary corrected",
+  future_dated_evidence: "Evidence after the cutoff detected",
+};
+const evidenceLabel = type => EVIDENCE_LABELS[type] || String(type).replaceAll("_", " ");
+
+function checkpointMarkup(rounds = []) {
+  return rounds.length ? rounds.map((round, index) => {
+    let title, detail, searches = "";
+    if (round.kind === "gate") {
+      title = `Evidence check · ${round.coverage === null ? "coverage unavailable" : `${round.coverage}% of required types`}`;
+      const missing = round.missing.map(evidenceLabel).join(", ");
+      const reason = missing && round.reason?.startsWith("Missing critical evidence:") ? "Requested targeted retrieval." : round.reason;
+      detail = [missing ? `Missing: ${missing}.` : "", reason].filter(Boolean).join(" ");
+    } else if (round.kind === "retrieval") {
+      title = `Targeted retrieval${round.attempt == null ? "" : ` · attempt ${round.attempt}`}`;
+      detail = "Additional searches selected to address an evidence or verification gap.";
+      if (round.searches.length) searches = `<details class="checkpoint-searches"><summary>${round.searches.length} search instructions</summary><ul>${round.searches.map(search => `<li><strong>${escapeHtml(SOURCE_LABELS[search.source] || search.source || "Source unavailable")}</strong><p>${escapeHtml(search.query || "Query unavailable")}</p>${search.reason ? `<small>${escapeHtml(search.reason)}</small>` : ""}</li>`).join("")}</ul></details>`;
+    } else {
+      title = "Verification checkpoint";
+      detail = `${round.issues.length} issue records.${round.route === "targeted_retrieval" ? " Requested another retrieval pass." : round.route === "build_report" ? " Continued to the report." : ""}`;
+    }
+    return `<article class="checkpoint ${round.kind}"><span class="execution-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail || "No decision explanation recorded.")}</p>${searches}</div></article>`;
+  }).join("") : '<div class="empty-evidence">No checkpoint history recorded. New runs show evidence checks and any retrieval decisions here.</div>';
+}
+
+function renderEvidenceInspection(report) {
+  const gate = summarizeEvidenceGate(report);
+  $("evidenceGateSummary").textContent = gate.recorded
+    ? `${gate.coverage === null ? "Coverage unavailable" : `${gate.coverage}% of required evidence types present`}. ${gate.reason || "No final gate explanation recorded."}`
+    : "This saved report has no evidence gate record.";
+  $("evidenceCoverage").innerHTML = gate.critical.length ? gate.critical.map(item => {
+    const status = item.present === true ? "present" : item.present === false ? "missing" : "unknown";
+    const counts = item.validCount === null ? "Item count unavailable" : `${item.validCount} valid item${item.validCount === 1 ? "" : "s"}${item.excludedCount ? ` · ${item.excludedCount} after-cutoff item${item.excludedCount === 1 ? "" : "s"} excluded` : ""}`;
+    return `<div class="coverage-row ${status}"><strong>${escapeHtml(evidenceLabel(item.type))}</strong><span>${escapeHtml(counts)}</span><small>${status === "present" ? "Present" : status === "missing" ? "Missing" : "Not recorded"}</small></div>`;
+  }).join("") : '<div class="empty-evidence">Required evidence types were not recorded.</div>';
+  $("evidenceCheckpointHistory").innerHTML = checkpointMarkup(gate.rounds);
+  const verification = summarizeVerification(report);
+  $("verificationChecks").innerHTML = verification.checks.length ? verification.checks.map(check => {
+    const [label, detail] = CHECK_LABELS[check.key] || [String(check.key).replaceAll("_", " "), "Recorded rule check."];
+    const statusLabel = { pass: "Passed", fail: "Flagged", not_applicable: "No target set", unknown: "Not recorded" }[check.status];
+    return `<article class="verification-check ${escapeHtml(check.status)}"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(statusLabel)}</span></div><p>${escapeHtml(detail)}</p></article>`;
+  }).join("") : '<div class="empty-evidence">Individual verification checks were not recorded.</div>';
+  const repairNote = verification.ruleRepairCount ? `<p class="field-hint">${verification.ruleRepairCount} generation pass${verification.ruleRepairCount === 1 ? "" : "es"} recorded a rule adjustment before verification. See intermediate snapshots for the original and adjusted outputs.</p>` : "";
+  $("verificationIssues").innerHTML = repairNote + (verification.issues.length
+    ? `<h4>Final verification issue records</h4><ul>${verification.issues.map(issue => {
+      const locations = [issue.branch, issue.section, issue.claim, ...(issue.details || []).map(detail => `${detail.path || "Numeric claim"}${detail.value == null ? "" : `: ${detail.value}`}`)].filter(Boolean);
+      return `<li><strong>${escapeHtml(ISSUE_LABELS[issue.type] || String(issue.type || "Recorded issue").replaceAll("_", " "))}</strong>${locations.length ? `<p>${escapeHtml(locations.join(" · "))}</p>` : ""}${issue.evidence_ids?.length ? evidenceReferences(issue.evidence_ids) : ""}</li>`;
+    }).join("")}</ul>`
+    : `<p class="field-hint">${verification.recorded ? "No issue records in the final verification pass." : "Verification details unavailable for this report."}</p>`);
+}
+
+function evidenceReferences(ids = []) {
+  if (!ids.length) return "";
+  const known = new Set((displayedReport?.report.evidence || []).map(item => item.id));
+  return `<div class="evidence-id-row citation-row">${[...new Set(ids)].map(id => `<button class="evidence-reference" type="button" data-evidence-id="${escapeHtml(id)}" aria-label="Inspect evidence ${escapeHtml(id)}" ${known.has(id) ? "" : 'disabled title="Evidence not available in this report"'}>${escapeHtml(id)}</button>`).join("")}</div>`;
+}
+
+function openReferencedEvidence(id) {
+  const evidence = (displayedReport?.report.evidence || []).find(item => item.id === id);
+  if (!evidence) return;
+  $("evidenceDialogTitle").textContent = `Evidence ${id}`;
+  const mode = evidence.evidence_type === "crowd_expectation" ? "polymarket" : evidence.evidence_type === "historical_news" ? "memory" : "default";
+  $("evidenceDialogContent").innerHTML = renderEvidenceItem(evidence, mode) + `<p class="field-hint">Type: ${escapeHtml(evidenceLabel(evidence.evidence_type))} · ${evidence.temporal_valid === false ? "After the analysis cutoff; excluded from gate coverage" : "Not flagged as after the analysis cutoff"}</p>`;
+  if (!$("evidenceDialog").open) $("evidenceDialog").showModal();
 }
 
 function renderLiveSources(statuses = {}) {
@@ -422,6 +510,7 @@ function beginRunUi() {
   renderStages([], "understand_request");
   renderLiveSources({});
   renderLiveAudit({});
+  $("liveEvidenceProgress").innerHTML = '<div class="empty-evidence">Waiting for collection and the first evidence check.</div>';
 }
 
 function finishRunUi(success, message) {
@@ -453,6 +542,12 @@ function updateRunProgress(run) {
   renderStages(trace, run.current_node, run.status);
   renderLiveSources(run.source_status || {});
   renderLiveAudit(run);
+  const checkpoints = summarizeEvidenceGate({
+    evidence_gate: run.evidence_gate,
+    agent_audit: { intermediate_results: run.intermediate_results || [], decision_audit: run.decision_audit || [] },
+  }).rounds;
+  $("liveEvidenceProgress").innerHTML = checkpoints.length ? checkpointMarkup(checkpoints)
+    : '<div class="empty-evidence">Waiting for collection and the first evidence check.</div>';
   if (run.evidence_gate?.decision === "retrieve_more") {
     $("analysisStateBanner").textContent = `Evidence gate requested targeted retrieval. Attempt ${run.retrieval_attempts || 0} is bounded by the retry limit.`;
   }
@@ -593,7 +688,7 @@ function renderBranch(prefix, branch = {}) {
   const chainContainer = $(`${prefix}Chain`);
   const chain = branch.chain || [];
   chainContainer.innerHTML = chain.length
-    ? chain.map((step, index) => `<div class="chain-step"><span class="chain-index">${index + 1}</span><div><strong>${escapeHtml(step.claim || "")}</strong><p>${escapeHtml(step.transmission_mechanism || "")}</p><div class="evidence-id-row">${(step.evidence_ids || []).map((id) => `<span>${escapeHtml(id)}</span>`).join("")}</div></div></div>`).join("")
+    ? chain.map((step, index) => `<div class="chain-step"><span class="chain-index">${index + 1}</span><div><strong>${escapeHtml(step.claim || "")}</strong><p>${escapeHtml(step.transmission_mechanism || "")}</p>${evidenceReferences(step.evidence_ids || [])}</div></div>`).join("")
     : '<div class="empty-evidence">This branch is intentionally not asserted by the available evidence.</div>';
   const meta = $(`${prefix}Meta`);
   const groups = [
@@ -674,13 +769,22 @@ function renderIntermediateResults(records = []) {
 function renderLlmCalls(llm = {}) {
   $("llmInputExplanation").textContent = llm.input_explanation || "";
   const calls = llm.calls || [];
+  const usages = calls.map(modelTokenUsage);
+  const measured = usages.filter(usage => usage.measured);
+  const inputTotal = measured.reduce((sum, usage) => sum + usage.input, 0);
+  const outputTotal = measured.reduce((sum, usage) => sum + usage.output, 0);
+  $("llmTokenSummary").textContent = measured.length
+    ? `${inputTotal.toLocaleString()} input + ${outputTotal.toLocaleString()} output = ${(inputTotal + outputTotal).toLocaleString()} recorded generation tokens across ${measured.length} of ${calls.length} calls. Repeated prompt content counts again; embedding usage is excluded.`
+    : "Input/output token usage was not recorded. Generation usage excludes embeddings.";
+  const tokenText = value => numericValue(value) === null ? "N/A" : Number(value).toLocaleString();
   $("llmCalls").innerHTML = calls.length
-    ? calls.map((call) => `<article class="llm-call"><div><strong>${escapeHtml(call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Tokens</dt><dd>${escapeHtml(call.usage?.total_tokens ?? "unavailable")}</dd></div></dl><strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to Ollama</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
+    ? calls.map((call, index) => `<article class="llm-call"><div><strong>${index + 1}. ${escapeHtml(NODE_LABELS[call.node] || call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Input tokens</dt><dd>${tokenText(usages[index].input)}</dd></div><div><dt>Output tokens</dt><dd>${tokenText(usages[index].output)}</dd></div><div><dt>Total tokens</dt><dd>${tokenText(usages[index].total)}</dd></div></dl><strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to Ollama</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
     : '<div class="empty-evidence">No LLM call record is available.</div>';
 }
 
 function renderExecutionBrief(report) {
   const summary = summarizeExecution(report);
+  const applicableChecks = summarizeVerification(report).checks.filter(check => ["pass", "fail"].includes(check.status));
   const humanize = value => String(value).replaceAll("_", " ");
   const embedding = summary.embedding;
   const embeddingText = embedding
@@ -691,7 +795,7 @@ function renderExecutionBrief(report) {
     ["Tool calls", `${summary.toolSuccess} / ${summary.calls.length} succeeded`, "Actual calls, including retries and memory writes."],
     ["Local LLM", `${summary.llmSuccess} / ${summary.llmCalls.length} succeeded`, `${summary.failedLlm} fallback calls · ${summary.repaired} thesis repair passes`],
     ["Historical RAG", `${summary.memoryUsed} / 3 chunks used`, embeddingText],
-    ["Feedback loop", `${summary.retryCount} retrieval retries`, `${summary.checksPassed} / ${summary.checksTotal} final checks passed`],
+    ["Feedback loop", `${summary.retryCount} retrieval retries`, applicableChecks.length ? `${applicableChecks.filter(check => check.status === "pass").length} / ${applicableChecks.length} applicable final checks passed` : "Individual checks not recorded"],
     ["Runtime", report.observability?.total_duration_ms != null ? `${(report.observability.total_duration_ms / 1000).toFixed(1)} s` : "Unavailable", `${report.observability?.node_executions ?? 0} node executions`],
     ["Model usage", `${report.observability?.model_calls?.total_tokens ?? 0} tokens`, `${report.observability?.model_calls?.total ?? summary.llmCalls.length} calls · $${Number(report.observability?.model_calls?.metered_api_cost_usd || 0).toFixed(4)} metered API fee`],
   ];
@@ -752,10 +856,12 @@ function renderReport(report, trace = [], { replay = false } = {}) {
   const decisionBrief = report.decision_brief || {};
   $("keyInsight").textContent = decisionBrief.key_insight || "No evidence-backed leading insight was available.";
   $("keyInsightWhy").textContent = decisionBrief.why_it_matters || "";
+  $("keyInsightReferences").innerHTML = evidenceReferences(decisionBrief.evidence_ids || []);
   $("watchItems").innerHTML = (decisionBrief.watch_items || []).length
-    ? decisionBrief.watch_items.map((item, index) => `<article class="watch-item"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(item.signal || "Signal")}</strong><p>${escapeHtml(item.why_it_matters || "")}</p><small><b>Confirm:</b> ${escapeHtml(item.confirm_if || "--")}</small><small><b>Invalidate:</b> ${escapeHtml(item.invalidate_if || "--")}</small></div></article>`).join("")
+    ? decisionBrief.watch_items.map((item, index) => `<article class="watch-item"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(item.signal || "Signal")}</strong><p>${escapeHtml(item.why_it_matters || "")}</p><small><b>Confirm:</b> ${escapeHtml(item.confirm_if || "--")}</small><small><b>Invalidate:</b> ${escapeHtml(item.invalidate_if || "--")}</small>${evidenceReferences(item.evidence_ids || [])}</div></article>`).join("")
     : '<div class="empty-evidence">No supported watch item survived verification.</div>';
   $("nextResearchAction").textContent = decisionBrief.next_research_action || "Collect the missing critical evidence before extending the conclusion.";
+  renderCounterfactual(report.counterfactual_evidence_test);
 
   const explanations = scores.explanation || {};
   $("scoreGrid").innerHTML = [
@@ -805,6 +911,7 @@ function renderReport(report, trace = [], { replay = false } = {}) {
   renderToolCallAudit(audit.tool_calls || []);
   renderIntermediateResults(audit.intermediate_results || []);
   renderLlmCalls(report.llm || {});
+  renderEvidenceInspection(report);
   $("allEvidence").innerHTML = evidence.length
     ? evidence.map((item) => renderEvidenceItem(item, item.evidence_type === "crowd_expectation" ? "polymarket" : item.evidence_type === "historical_news" ? "memory" : "default")).join("")
     : '<div class="empty-evidence">No normalized evidence is available.</div>';
@@ -813,6 +920,27 @@ function renderReport(report, trace = [], { replay = false } = {}) {
   $("limitationsList").innerHTML = limitations.length
     ? [...new Set(limitations)].map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : "<li>No major source limitation or evidence conflict was recorded.</li>";
+}
+
+function renderCounterfactual(result) {
+  const section = $("counterfactualSection");
+  section.classList.toggle("hidden", !result);
+  section.innerHTML = "";
+  if (!result) return;
+  const claims = (result.claims || []).map(claim => `<article class="prompt-card">
+    <p class="reason-title">Claim</p><strong>${escapeHtml(claim.claim)}</strong>
+    <ul class="clean-list">${(claim.evidence || []).map(item => `<li>
+      ${escapeHtml(item.title)} → <b>${escapeHtml(item.importance || "Not evaluated")}</b>
+      ${evidenceReferences([item.evidence_id])}
+    </li>`).join("")}</ul><p class="detail-copy">${escapeHtml(claim.explanation || "")}</p>
+    <details><summary>Support changes</summary><ul class="clean-list">${(claim.evidence || []).map(item => `<li>
+      ${escapeHtml(item.title)}: ${escapeHtml(claim.original_support)} → ${escapeHtml(item.support_after || "unavailable")}
+      (${escapeHtml(item.impact || "unavailable")} impact). ${escapeHtml(item.reason || "")}
+    </li>`).join("")}</ul></details></article>`).join("");
+  section.innerHTML = `<div class="subsection-heading"><p class="section-label">Evidence dependency</p>
+    <h3>Counterfactual Evidence Test</h3></div><p class="field-hint">${escapeHtml(result.note || "")}</p>
+    ${claims || '<p class="detail-copy">No evidence dependency could be evaluated.</p>'}
+    ${result.status !== "completed" ? `<p class="field-hint">${escapeHtml(result.status)}: ${escapeHtml((result.errors || []).join("; "))}</p>` : ""}`;
 }
 
 async function submitAnalysis(event) {
@@ -974,6 +1102,17 @@ async function loadArchitecture() {
 }
 
 function bindEvents() {
+  $("reportContent").addEventListener("click", event => {
+    const reference = event.target.closest("button[data-evidence-id]");
+    if (reference) openReferencedEvidence(reference.dataset.evidenceId);
+  });
+  $("closeEvidenceDialog").addEventListener("click", () => $("evidenceDialog").close());
+  $("evidenceDialog").addEventListener("click", event => {
+    if (event.target === $("evidenceDialog")) {
+      const bounds = $("evidenceDialog").getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) $("evidenceDialog").close();
+    }
+  });
   $("analysisForm").addEventListener("submit", submitAnalysis);
   $("resetButton").addEventListener("click", resetOutput);
   $("refreshPolymarketButton").addEventListener("click", () => loadPolymarketStatus());

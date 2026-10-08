@@ -147,6 +147,10 @@ class OllamaClient:
         response_model: Type[BaseModel],
         model: Optional[str] = None,
         temperature: float = 0.15,
+        *,
+        timeout_seconds: Optional[float] = None,
+        max_output_tokens: Optional[int] = None,
+        think: Optional[bool] = None,
     ) -> StructuredResult:
         selected_model = self.choose_model(model)
         request_body = {
@@ -157,6 +161,10 @@ class OllamaClient:
             "options": {"temperature": max(0.0, min(float(temperature), 1.0))},
             "keep_alive": "10m",
         }
+        if max_output_tokens is not None:
+            request_body["options"]["num_predict"] = max(1, int(max_output_tokens))
+        if think is not None:
+            request_body["think"] = think
         started = time.perf_counter()
         request = urllib.request.Request(
             self.generate_url,
@@ -168,7 +176,7 @@ class OllamaClient:
         raw_text = ""
         try:
             with urllib.request.urlopen(
-                request, timeout=self.timeout_seconds
+                request, timeout=self.timeout_seconds if timeout_seconds is None else timeout_seconds
             ) as response:
                 body = json.loads(response.read().decode("utf-8"))
             raw_text = body.get("response") or ""

@@ -1,0 +1,77 @@
+{
+  "example_type": "live_ollama_on_synthetic_evidence",
+  "model": "qwen3:8b",
+  "added_model_calls": 3,
+  "recorded_tokens": 1253,
+  "counterfactual_evidence_test": {
+    "status": "completed",
+    "claims": [
+      {
+        "claim_id": "upside",
+        "claim": "Revenue and margin improvement support the positive thesis.",
+        "original_support": "strong",
+        "selected_evidence_ids": [
+          "E1",
+          "E2"
+        ],
+        "evidence": [
+          {
+            "evidence_id": "E1",
+            "title": "Revenue Growth",
+            "importance": "Critical",
+            "impact": "high",
+            "support_after": "weak",
+            "reason": "The evidence shows gross margin improvement but does not directly support revenue growth. The AI demand news is relevant but lacks direct connection to revenue or margin improvement.",
+            "status": "completed"
+          },
+          {
+            "evidence_id": "E2",
+            "title": "Gross Margin",
+            "importance": "Critical",
+            "impact": "high",
+            "support_after": "weak",
+            "reason": "The core assertion that revenue and margin improvement support the positive thesis is only partially supported. Revenue growth is directly mentioned, but margin improvement is not addressed in the remaining evidence. The AI demand news provides context but does not directly support the claim about margins.",
+            "status": "completed"
+          }
+        ],
+        "explanation": "Strong dependence on Revenue Growth, Gross Margin."
+      }
+    ],
+    "note": "Qualitative LLM evidence-dependency judgments, not calibrated probabilities or proof of causality.",
+    "errors": [],
+    "latency_ms": 13861
+  },
+  "counterfactual_tests": [
+    {
+      "run_id": "cf-example",
+      "claim_id": "upside",
+      "removed_evidence_id": "E1",
+      "original_support": "strong",
+      "support_before": "strong",
+      "counterfactual_support": "weak",
+      "support_after": "weak",
+      "impact": "high",
+      "importance": "Critical",
+      "status": "completed",
+      "latency_ms": 4952,
+      "reason": "The evidence shows gross margin improvement but does not directly support revenue growth. The AI demand news is relevant but lacks direct connection to revenue or margin improvement."
+    },
+    {
+      "run_id": "cf-example",
+      "claim_id": "upside",
+      "removed_evidence_id": "E2",
+      "original_support": "strong",
+      "support_before": "strong",
+      "counterfactual_support": "weak",
+      "support_after": "weak",
+      "impact": "high",
+      "importance": "Critical",
+      "status": "completed",
+      "latency_ms": 5182,
+      "reason": "The core assertion that revenue and margin improvement support the positive thesis is only partially supported. Revenue growth is directly mentioned, but margin improvement is not addressed in the remaining evidence. The AI demand news provides context but does not directly support the claim about margins."
+    }
+  ],
+  "untested_evidence_ids": [
+    "E3"
+  ]
+}

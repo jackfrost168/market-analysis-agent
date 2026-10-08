@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .graph import build_graph, graph_spec
+from .counterfactual import enabled as counterfactual_enabled, report_section, run_counterfactual
 from .llm import OllamaClient
 from .nodes import AgentNodes
 from .observability import aggregate_run_metrics, build_run_metrics
@@ -116,6 +117,17 @@ class AgentService:
             final_state = snapshot
             if progress_callback:
                 progress_callback(snapshot)
+        # Optional post-analysis hook: leave all graph nodes, routes and the original thesis intact.
+        if counterfactual_enabled() and final_state.get("report"):
+            final_state["counterfactual_tests"] = {"status": "running"}
+            if progress_callback:
+                progress_callback(final_state)
+            additional = run_counterfactual(self.llm, final_state)
+            final_state["counterfactual_tests"] = additional["counterfactual_tests"]
+            final_state["evidence_dependency"] = additional["evidence_dependency"]
+            final_state["llm_calls"] = list(final_state.get("llm_calls") or []) + additional["llm_calls"]
+            final_state["report"]["counterfactual_evidence_test"] = report_section(additional)
+            final_state["report"]["llm"]["calls"] = final_state["llm_calls"]
         completed_at = utc_now_iso()
         final_state["run_metrics"] = build_run_metrics(
             final_state,

@@ -30,6 +30,8 @@ class AgentState(TypedDict, total=False):
     quantitative_analysis: Dict[str, Any]
     thesis_graph: Dict[str, Any]
     verification: Dict[str, Any]
+    counterfactual_tests: Dict[str, Any]
+    evidence_dependency: List[Dict[str, Any]]
     report: Dict[str, Any]
     run_metrics: Dict[str, Any]
     next_step: str

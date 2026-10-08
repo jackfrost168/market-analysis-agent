@@ -82,6 +82,9 @@ class RunManager:
                 "model": state.get("model"),
                 "run_metrics": state.get("run_metrics") or {},
             }
+            if (state.get("counterfactual_tests") or {}).get("status") == "running":
+                snapshot["current_node"] = "counterfactual_evidence_test"
+                snapshot["message"] = "Testing evidence dependency after analysis..."
             with self._lock:
                 snapshot["revision"] = self._runs[run_id].get("revision", 0) + 1
                 self._runs[run_id].update(snapshot)

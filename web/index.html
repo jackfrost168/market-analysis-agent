@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260930-4">
-  <link rel="stylesheet" href="/presentation.css">
+  <link rel="stylesheet" href="/presentation.css?v=20261002-1">
 </head>
 <body>
   <div class="page-shell">
@@ -92,7 +92,8 @@
             <div id="stageTimeline" class="stage-timeline"></div>
             <div id="liveSourceStatus" class="live-source-status"></div>
             <div class="live-audit-grid"><div><span class="live-audit-label">Latest decision</span><div id="liveDecisionAudit" class="live-audit-output">Waiting for the first node...</div></div><div><span class="live-audit-label">Tools called so far</span><div id="liveToolCalls" class="live-tool-list"><span>None yet</span></div></div></div>
-            <details class="technical-progress"><summary>Inspect the nine LangGraph nodes</summary><div id="nodeTimeline" class="node-timeline"></div></details>
+            <details class="technical-progress"><summary>Follow the actual execution order</summary><div id="nodeTimeline" class="execution-path"></div></details>
+            <details id="liveEvidenceDetails" class="technical-progress"><summary>Evidence gaps &amp; retrieval decisions</summary><div id="liveEvidenceProgress" class="checkpoint-history"></div></details>
           </section>
 
           <div id="reportContent" class="report-content hidden">
@@ -112,9 +113,15 @@
               <p id="verificationNotice" class="verification-notice"></p>
             </section>
             <article class="narrative-card"><p class="reason-title">Why this view</p><ul id="whyList" class="clean-list"></ul><p class="future-label">What to watch next</p><p id="futureExpectation" class="future-copy"></p></article>
-            <section class="decision-brief-section" aria-label="Decision-oriented insights"><div class="subsection-heading"><p class="section-label">Forward-looking synthesis</p><h3>Useful signals</h3></div><article class="prompt-card decision-brief-card"><p class="reason-title">Key insight</p><strong id="keyInsight">--</strong><p id="keyInsightWhy" class="detail-copy"></p><div id="watchItems" class="watch-item-grid"></div><p class="future-label">Next research action</p><p id="nextResearchAction" class="future-copy"></p></article></section>
+            <section class="decision-brief-section" aria-label="Decision-oriented insights"><div class="subsection-heading"><p class="section-label">Forward-looking synthesis</p><h3>Useful signals</h3></div><article class="prompt-card decision-brief-card"><p class="reason-title">Key insight</p><strong id="keyInsight">--</strong><p id="keyInsightWhy" class="detail-copy"></p><div id="keyInsightReferences"></div><div id="watchItems" class="watch-item-grid"></div><p class="future-label">Next research action</p><p id="nextResearchAction" class="future-copy"></p></article></section>
+            <section id="counterfactualSection" class="hidden" aria-label="Counterfactual Evidence Test"></section>
             <section><div class="subsection-heading"><p class="section-label">Calculated in Python</p><h3>Market &amp; financial signals</h3></div><div id="signalGrid" class="signal-grid"></div></section>
             <section><div class="subsection-heading"><p class="section-label">Evidence diagnostics</p><h3>How well is this answer supported?</h3></div><p class="field-hint">Rule-based indicators of evidence and references. These scores have not been calibrated as prediction accuracy or investment success probabilities.</p><div id="scoreGrid" class="score-grid"></div></section>
+            <details class="report-details"><summary>Evidence gaps, retrieval decisions &amp; verification checks</summary><div class="detail-body inspection-grid">
+              <section><h4>Required evidence</h4><p id="evidenceGateSummary" class="detail-copy"></p><div id="evidenceCoverage" class="coverage-list"></div></section>
+              <section><h4>What happened at each checkpoint</h4><div id="evidenceCheckpointHistory" class="checkpoint-history"></div></section>
+              <section class="verification-section"><h4>Verification checks</h4><p class="field-hint">These rules check references, dates and numeric traceability. Passing does not establish that every claim is factually or causally correct.</p><div id="verificationChecks" class="verification-checks"></div><div id="verificationIssues" class="verification-issues"></div></section>
+            </div></details>
 
             <details class="report-details"><summary>Upside, downside &amp; invalidation conditions</summary><div class="detail-body explanation-grid thesis-grid"><article class="reason-card bullish thesis-card"><div class="thesis-title-row"><p class="reason-title">Upside thesis</p><span class="branch-tag upside">UPSIDE</span></div><p id="upsideScenario" class="scenario-copy"></p><div id="upsideChain" class="thesis-chain"></div><div id="upsideMeta" class="branch-meta"></div></article><article class="reason-card bearish thesis-card"><div class="thesis-title-row"><p class="reason-title">Downside thesis</p><span id="downsideStatus" class="branch-tag downside">--</span></div><p id="downsideScenario" class="scenario-copy"></p><div id="downsideChain" class="thesis-chain"></div><div id="downsideMeta" class="branch-meta"></div></article></div></details>
             <details class="report-details"><summary>Evidence used: news, historical memory &amp; Polymarket</summary><div class="detail-body evidence-stack">
@@ -124,9 +131,9 @@
             </div></details>
             <details class="report-details"><summary>Tool selection: LLM proposals &amp; rule decisions</summary><div class="detail-body"><p class="detail-copy">This is the initial research plan. The actual call summary also includes any later targeted retrieval or memory writes.</p><div id="researchSourcePlan" class="source-plan-grid"></div></div></details>
             <details class="report-details"><summary>Tools actually called: arguments &amp; results</summary><div id="toolCallAudit" class="detail-body tool-call-list"></div></details>
-            <details class="report-details agent-audit-details"><summary>Node decisions, rules &amp; feedback loops</summary><div class="detail-body"><p id="agentProofText" class="detail-copy"></p><div id="finalNodeTimeline" class="node-timeline final"></div><div id="decisionAudit" class="decision-audit-list"></div></div></details>
+            <details class="report-details agent-audit-details"><summary>Node decisions, rules &amp; feedback loops</summary><div class="detail-body"><p id="agentProofText" class="detail-copy"></p><p class="field-hint">Actual execution order, including repeated visits. Durations are per node; parallel tool latencies should not be added to infer total runtime.</p><div id="finalNodeTimeline" class="execution-path"></div><div id="decisionAudit" class="decision-audit-list"></div></div></details>
             <details class="report-details"><summary>Intermediate state snapshots</summary><div class="detail-body"><p class="detail-copy">Persisted node inputs and outputs, including explicit decisions and rules.</p><div id="intermediateResults" class="intermediate-list"></div></div></details>
-            <details class="report-details"><summary>LLM calls: models, prompts &amp; fallbacks</summary><div class="detail-body"><p id="llmInputExplanation" class="detail-copy"></p><div id="llmCalls" class="llm-call-list"></div></div></details>
+            <details class="report-details"><summary>LLM calls: models, prompts &amp; fallbacks</summary><div class="detail-body"><p id="llmInputExplanation" class="detail-copy"></p><p id="llmTokenSummary" class="field-hint"></p><div id="llmCalls" class="llm-call-list"></div></div></details>
             <details class="report-details"><summary>Source status &amp; all normalized evidence</summary><div class="detail-body"><div id="sourceStatusTable" class="source-status-table"></div><div id="allEvidence" class="evidence-stack"></div></div></details>
             <article id="limitationsCard" class="prompt-card limitations-card"><p class="reason-title">Limitations &amp; conflicts</p><ul id="limitationsList" class="clean-list"></ul></article>
           </div>
@@ -148,6 +155,7 @@
     <details class="panel architecture-panel interview-architecture"><summary>Under the hood: the nine-node LangGraph workflow</summary><p class="support-text">The four stages group nine execution nodes. Evidence gaps return to targeted retrieval, with a shared retry budget. A completed report may still carry limitations.</p><div id="architectureFlow" class="architecture-flow" aria-label="Agent workflow"></div></details>
     <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
-  <script type="module" src="/app.js?v=20260930-3"></script>
+  <dialog id="evidenceDialog" class="evidence-dialog" aria-labelledby="evidenceDialogTitle"><div class="evidence-dialog-heading"><h3 id="evidenceDialogTitle">Referenced evidence</h3><button id="closeEvidenceDialog" class="ghost-button compact" type="button" autofocus>Close</button></div><p class="field-hint">Inspect the source behind this reference. A valid ID does not by itself prove that the source supports the claim.</p><div id="evidenceDialogContent"></div></dialog>
+  <script type="module" src="/app.js?v=20261008-cf1"></script>
 </body>
 </html>
