@@ -311,6 +311,7 @@ async function loadModels() {
       option.disabled = model.available === false;
       select.append(option);
     }
+    select.value = "auto";
     $("ollamaDot").classList.toggle("online", Boolean(payload.success));
     $("llmStatus").textContent = `Default: ${payload.auto_selected || "auto"}. ${payload.default_available === false ? "Default model unavailable; configure the Qwen API key or select an available model. " : ""}${(payload.models || []).some(model => model.provider === "qwen_api") ? "API availability reflects key configuration; model access is validated on each call." : payload.success ? "Ollama connected." : "Ollama unavailable."}`;
   } catch (error) {
