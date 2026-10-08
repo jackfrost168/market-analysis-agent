@@ -52,6 +52,8 @@ class AgentService:
         self.runs = RunRepository(self.data_dir / "agent_runs.sqlite3")
 
     def _initial_state(self, payload: Dict[str, Any], run_id: str) -> Dict[str, Any]:
+        if isinstance(self.llm, OllamaClient):
+            self.llm.validate_model(payload.get("model"))
         if "enable_counterfactual_evidence_test" in payload:
             counterfactual_enabled(payload["enable_counterfactual_evidence_test"])
         asset_input = str(payload.get("asset") or payload.get("asset_input") or "").strip()
@@ -193,7 +195,10 @@ class AgentService:
         try:
             models = self.llm.list_models()
             selected = self.llm.choose_model("auto")
-            return {"success": True, "models": models, "auto_selected": selected}
+            available = [item for item in models if item.get("available", True)]
+            default_available = any(item["name"] == selected for item in available)
+            return {"success": bool(available), "models": models, "auto_selected": selected,
+                    "default_available": default_available}
         except Exception as exc:
             return {
                 "success": False,

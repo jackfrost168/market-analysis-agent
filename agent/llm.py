@@ -97,15 +97,46 @@ class OllamaClient:
         self.tags_url = tags_url or os.environ.get("OLLAMA_TAGS_URL", DEFAULT_TAGS_URL)
         self.default_model = default_model or os.environ.get("OLLAMA_MODEL", "")
         self.timeout_seconds = timeout_seconds
+        # Trusted server configuration only; users choose a model, never an endpoint.
+        self.model_routes = json.loads(os.environ.get("OLLAMA_MODEL_ROUTES") or "{}")
+        if not isinstance(self.model_routes, dict):
+            raise ValueError("OLLAMA_MODEL_ROUTES must be a JSON object")
+        for name, route in self.model_routes.items():
+            if not isinstance(route, dict) or not str(route.get("base_url", "")).startswith(("http://", "https://")):
+                raise ValueError(f"Invalid Ollama route for {name}")
+
+    def validate_model(self, requested: Optional[str]) -> None:
+        if self.model_routes and requested not in (None, "", "auto") and requested not in self.model_routes:
+            raise ValueError("Select a configured LLM model")
+
+    def _inventory(self, tags_url: str) -> List[Dict[str, Any]]:
+        request = urllib.request.Request(tags_url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return json.loads(response.read().decode("utf-8")).get("models", [])
 
     def list_models(self) -> List[Dict[str, Any]]:
-        request = urllib.request.Request(
-            self.tags_url, headers={"Accept": "application/json"}
-        )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        if self.model_routes:
+            models = []
+            inventories = {}
+            for name, route in self.model_routes.items():
+                url = route["base_url"].rstrip("/") + "/api/tags"
+                if url not in inventories:
+                    try:
+                        inventories[url] = (self._inventory(url), None)
+                    except Exception as exc:
+                        inventories[url] = ([], str(exc))
+                inventory, error = inventories[url]
+                installed = next((item for item in inventory if (item.get("name") or item.get("model")) == name), None)
+                models.append({
+                    "name": name, "label": route.get("label") or name,
+                    "available": installed is not None,
+                    "size": installed.get("size") if installed else None,
+                    "error": error or (None if installed else "Model is not installed"),
+                })
+            return models
+        inventory = self._inventory(self.tags_url)
         models = []
-        for item in payload.get("models", []):
+        for item in inventory:
             name = item.get("name") or item.get("model")
             if name:
                 models.append(
@@ -118,10 +149,14 @@ class OllamaClient:
         return models
 
     def choose_model(self, requested: Optional[str] = None) -> str:
+        self.validate_model(requested)
         if requested and requested != "auto":
             return requested
         if self.default_model:
+            self.validate_model(self.default_model)
             return self.default_model
+        if self.model_routes:
+            return next(iter(self.model_routes))
         try:
             installed = [item["name"] for item in self.list_models()]
         except Exception:
@@ -153,6 +188,8 @@ class OllamaClient:
         think: Optional[bool] = None,
     ) -> StructuredResult:
         selected_model = self.choose_model(model)
+        route = self.model_routes.get(selected_model, {})
+        effective_timeout = timeout_seconds if timeout_seconds is not None else route.get("timeout_seconds", self.timeout_seconds)
         request_body = {
             "model": selected_model,
             "prompt": prompt,
@@ -163,11 +200,14 @@ class OllamaClient:
         }
         if max_output_tokens is not None:
             request_body["options"]["num_predict"] = max(1, int(max_output_tokens))
-        if think is not None:
-            request_body["think"] = think
+        effective_think = think if think is not None else route.get("think")
+        if effective_think is not None:
+            request_body["think"] = effective_think
+        if route.get("num_ctx"):
+            request_body["options"]["num_ctx"] = int(route["num_ctx"])
         started = time.perf_counter()
         request = urllib.request.Request(
-            self.generate_url,
+            route["base_url"].rstrip("/") + "/api/generate" if route else self.generate_url,
             data=json.dumps(request_body).encode("utf-8"),
             method="POST",
             headers={"Content-Type": "application/json"},
@@ -176,7 +216,7 @@ class OllamaClient:
         raw_text = ""
         try:
             with urllib.request.urlopen(
-                request, timeout=self.timeout_seconds if timeout_seconds is None else timeout_seconds
+                request, timeout=effective_timeout
             ) as response:
                 body = json.loads(response.read().decode("utf-8"))
             raw_text = body.get("response") or ""

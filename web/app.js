@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261009-cf4";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261009-models1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -304,12 +304,13 @@ async function loadModels() {
     for (const model of payload.models || []) {
       const option = document.createElement("option");
       option.value = model.name;
-      option.textContent = model.name;
+      option.textContent = `${model.label || model.name}${model.available === false ? " (unavailable)" : ""}`;
+      option.disabled = model.available === false;
       select.append(option);
     }
     $("ollamaDot").classList.toggle("online", Boolean(payload.success));
     $("llmStatus").textContent = payload.success
-      ? `${payload.models.length} local models found. Auto selects ${payload.auto_selected}.`
+      ? `Default: ${payload.auto_selected}. ${(payload.models || []).filter(model => model.available !== false).length} models available.${payload.default_available === false ? " Default model unavailable; choose another model." : ""}`
       : `Ollama unavailable. The graph will use deterministic fallbacks. ${payload.error || ""}`;
   } catch (error) {
     $("ollamaDot").classList.remove("online");

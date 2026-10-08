@@ -84,3 +84,11 @@ ssh -N -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
 EC2 上的服务文件示例为 `awsdeploy/financial-agent.service.example`。运行中可用 `systemctl status financial-agent`、`curl http://127.0.0.1:8001/api/health` 和 `sudo journalctl -u financial-agent -f` 检查服务。
 
 AWS 官方文档：[EC2 安全组](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-security-group.html)、[EBS 数据持久性](https://docs.aws.amazon.com/ebs/latest/userguide/EBSFeatures.html)。
+
+## AWS 1.7B / Mac 8B 模型切换
+
+`OLLAMA_MODEL_ROUTES` 可将模型名映射到不同的私有 Ollama 服务。前端 **Model, horizon & advanced options → LLM model** 显示服务标签；`Auto` 使用 `OLLAMA_MODEL`，不会偷偷切换到另一台机器。请求仅能选择配置中的模型。某个服务断开不会影响另一服务的模型列表；不可用模型会标注 unavailable。
+
+AWS 本机 Ollama 使用 `127.0.0.1:11435`，原 Mac SSH 转发保留 `127.0.0.1:11434`。systemd Ollama override 可设置 `OLLAMA_HOST=127.0.0.1:11435`、`OLLAMA_NUM_PARALLEL=1`、`OLLAMA_MAX_LOADED_MODELS=1` 和 `OLLAMA_CONTEXT_LENGTH=4096`，随后 `systemctl daemon-reload`、`systemctl enable --now ollama`，并执行 `OLLAMA_HOST=127.0.0.1:11435 ollama pull qwen3:1.7b`。
+
+服务 `.env` 中使用 `.env.example` 的 routes 示例；内存验证通过后将 `OLLAMA_MODEL` 设为 `qwen3:1.7b` 并重启 `financial-agent`。1.7B 路由禁用 thinking，8B 保留原调用参数。生成模型路由不会更改 embedding 端点、Vector DB 或已有报告。EC2 约 1 GiB 内存不足以正常运行此模型；swap 无法替代足够的物理内存，需要先升级内存容量并测量完整任务的延迟。
