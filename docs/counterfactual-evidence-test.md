@@ -6,12 +6,12 @@ not causal effects, prediction probabilities, or proof that a financial claim is
 
 ## Enable
 
-On the website, the always-visible **反事实证据测试 / Counterfactual Evidence Test**
-checkbox below the question enables this check for the next analysis. Leave it
-unchecked to avoid additional calls. The adjacent text shows the server default
-and per-run choice, and a result shortcut scrolls to the report section. Historical
-reports without this field display “本报告未记录反事实证据测试”; failed checks display
-their status instead of hiding the whole section.
+On the website, **Enable Counterfactual Evidence Test** under **Model, horizon &
+advanced options** enables this check for the next analysis. Leave it unchecked
+to avoid additional calls. Results appear in a report accordion titled
+**Counterfactual Evidence Test**, collapsed by default like the other report details.
+Older reports show “Not recorded for this report” inside it; failures show their
+status. The interface uses English throughout.
 
 API callers can pass `enable_counterfactual_evidence_test: true` or `false` in
 `POST /api/runs` or `POST /api/analyze`. An explicit choice overrides the environment

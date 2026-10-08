@@ -167,10 +167,9 @@ button:disabled { cursor: wait; opacity: .6; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
-.counterfactual-option { margin: 12px 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--green-soft); }
+.counterfactual-option { margin: 12px 0; }
 .counterfactual-choice { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
 .counterfactual-choice input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 3px; }
-.counterfactual-choice strong, .counterfactual-choice small { display: block; }
-.counterfactual-choice small { color: var(--muted); margin-top: 3px; }
+.counterfactual-choice small { color: var(--muted); }
 #counterfactualSection .citation-row { display: inline-flex; margin: 0 0 0 8px; }
 #counterfactualSection .counterfactual-status { font-weight: 600; }

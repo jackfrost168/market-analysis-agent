@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260930-4">
-  <link rel="stylesheet" href="/presentation.css?v=20261008-cf3">
+  <link rel="stylesheet" href="/presentation.css?v=20261009-cf4">
 </head>
 <body>
   <div class="page-shell">
@@ -53,12 +53,6 @@
           <label class="field"><span>Target condition</span><select id="targetCondition"><option value="auto">Infer from question (default: at or above)</option><option value="above">At or above target</option><option value="below">At or below target</option></select><small class="field-hint">Current threshold satisfaction is not a guarantee of a future closing price.</small></label>
           <label class="field question-field"><span>Your question</span><textarea id="query" name="query" rows="3" required>Show Apple's six month price trend, volatility, and maximum drawdown.</textarea></label>
           <p id="predictionProviderHint" class="field-hint">Prediction data: CoinRithm aggregation, original venue Polymarket. This is not Gamma direct data.</p>
-          <section class="counterfactual-option" aria-label="反事实证据测试 / Counterfactual Evidence Test">
-            <label class="counterfactual-choice"><input id="enableCounterfactualEvidenceTest" type="checkbox"><span><strong>反事实证据测试</strong><small>Counterfactual Evidence Test · 可选的分析后检查</small></span></label>
-            <p class="field-hint">逐项移除最重要的 2–3 条证据，检查同一个结论是否变弱。不会重新检索或重跑主分析。</p>
-            <p id="counterfactualOptionStatus" class="field-hint" role="status">默认关闭；勾选后增加模型调用，繁忙时可能等待或超时。</p>
-            <button id="counterfactualResultButton" type="button" class="ghost-button compact" disabled>查看反事实证据测试结果</button>
-          </section>
           <details class="advanced-context settings-details">
             <summary>Model, horizon &amp; advanced options</summary>
             <div class="advanced-context-body">
@@ -69,6 +63,10 @@
                 <label class="field"><span>Evidence retries</span><select id="maxRetries" name="maxRetries"><option value="1" selected>1 targeted retry</option><option value="2">2 targeted retries</option><option value="3">3 targeted retries</option></select></label>
                 <label class="field"><span>Reasoning temperature</span><div class="temperature-inline"><input id="temperatureSlider" type="range" min="0" max="60" step="5" value="15"><strong id="temperatureValue">0.15</strong></div></label>
               </div>
+              <section class="counterfactual-option" aria-label="Counterfactual Evidence Test">
+                <label class="counterfactual-choice"><input id="enableCounterfactualEvidenceTest" type="checkbox"><span>Enable Counterfactual Evidence Test <small>optional</small></span></label>
+                <p id="counterfactualOptionStatus" class="field-hint" role="status">Off by default. Adds model calls when enabled.</p>
+              </section>
               <label class="field"><span>Market notes</span><textarea id="notes" name="notes" rows="2" placeholder="Optional context, labeled separately from retrieved evidence."></textarea></label>
               <label class="field"><span>Headlines or research bullets</span><textarea id="headlines" name="headlines" rows="2" placeholder="Optional, one item per line."></textarea></label>
               <details class="api-diagnostic">
@@ -119,7 +117,6 @@
               <p id="verificationNotice" class="verification-notice"></p>
             </section>
             <article class="narrative-card"><p class="reason-title">Why this view</p><ul id="whyList" class="clean-list"></ul><p class="future-label">What to watch next</p><p id="futureExpectation" class="future-copy"></p></article>
-            <section id="counterfactualSection" aria-label="反事实证据测试 / Counterfactual Evidence Test"></section>
             <section class="decision-brief-section" aria-label="Decision-oriented insights"><div class="subsection-heading"><p class="section-label">Forward-looking synthesis</p><h3>Useful signals</h3></div><article class="prompt-card decision-brief-card"><p class="reason-title">Key insight</p><strong id="keyInsight">--</strong><p id="keyInsightWhy" class="detail-copy"></p><div id="keyInsightReferences"></div><div id="watchItems" class="watch-item-grid"></div><p class="future-label">Next research action</p><p id="nextResearchAction" class="future-copy"></p></article></section>
             <section><div class="subsection-heading"><p class="section-label">Calculated in Python</p><h3>Market &amp; financial signals</h3></div><div id="signalGrid" class="signal-grid"></div></section>
             <section><div class="subsection-heading"><p class="section-label">Evidence diagnostics</p><h3>How well is this answer supported?</h3></div><p class="field-hint">Rule-based indicators of evidence and references. These scores have not been calibrated as prediction accuracy or investment success probabilities.</p><div id="scoreGrid" class="score-grid"></div></section>
@@ -129,6 +126,7 @@
               <section class="verification-section"><h4>Verification checks</h4><p class="field-hint">These rules check references, dates and numeric traceability. Passing does not establish that every claim is factually or causally correct.</p><div id="verificationChecks" class="verification-checks"></div><div id="verificationIssues" class="verification-issues"></div></section>
             </div></details>
 
+            <details id="counterfactualSection" class="report-details"><summary>Counterfactual Evidence Test</summary><div id="counterfactualContent" class="detail-body"></div></details>
             <details class="report-details"><summary>Upside, downside &amp; invalidation conditions</summary><div class="detail-body explanation-grid thesis-grid"><article class="reason-card bullish thesis-card"><div class="thesis-title-row"><p class="reason-title">Upside thesis</p><span class="branch-tag upside">UPSIDE</span></div><p id="upsideScenario" class="scenario-copy"></p><div id="upsideChain" class="thesis-chain"></div><div id="upsideMeta" class="branch-meta"></div></article><article class="reason-card bearish thesis-card"><div class="thesis-title-row"><p class="reason-title">Downside thesis</p><span id="downsideStatus" class="branch-tag downside">--</span></div><p id="downsideScenario" class="scenario-copy"></p><div id="downsideChain" class="thesis-chain"></div><div id="downsideMeta" class="branch-meta"></div></article></div></details>
             <details class="report-details"><summary>Evidence used: news, historical memory &amp; Polymarket</summary><div class="detail-body evidence-stack">
               <article class="prompt-card"><div class="prompt-header"><p class="reason-title">News after filtering</p><span id="newsCount" class="count-chip">0</span></div><div id="filteredNews" class="evidence-stack"></div></article>
@@ -162,6 +160,6 @@
     <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
   <dialog id="evidenceDialog" class="evidence-dialog" aria-labelledby="evidenceDialogTitle"><div class="evidence-dialog-heading"><h3 id="evidenceDialogTitle">Referenced evidence</h3><button id="closeEvidenceDialog" class="ghost-button compact" type="button" autofocus>Close</button></div><p class="field-hint">Inspect the source behind this reference. A valid ID does not by itself prove that the source supports the claim.</p><div id="evidenceDialogContent"></div></dialog>
-  <script type="module" src="/app.js?v=20261008-cf3"></script>
+  <script type="module" src="/app.js?v=20261009-cf4"></script>
 </body>
 </html>
