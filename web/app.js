@@ -560,7 +560,7 @@ function finishRunUi(success, message) {
 function updateRunProgress(run) {
   const trace = run.node_trace || [];
   $("runningTitle").textContent = run.current_node ? NODE_LABELS[run.current_node] || run.current_node : "Agent is working";
-  $("runningMessage").textContent = run.message || "Waiting for the next node update...";
+  $("runningMessage").textContent = runProgressMessage(run, "Waiting for the next node update...");
   renderTimeline("nodeTimeline", trace, run.status, run.current_node);
   renderStages(trace, run.current_node, run.status);
   renderLiveSources(run.source_status || {});
@@ -599,7 +599,7 @@ async function pollRun(runId) {
     if (run.status === "completed") return run;
     if (run.status === "failed") throw new Error(run.error || run.message || "Agent run failed");
     if (attempt > 0 && attempt % 30 === 0) {
-      $("runningMessage").textContent = `${run.message || "Waiting for the Agent..."} · Poll ${attempt}/900`;
+      $("runningMessage").textContent = `${runProgressMessage(run, "Waiting for the Agent...")} · Poll ${attempt}/900`;
     }
     await delay(800);
   }
@@ -943,6 +943,12 @@ function renderReport(report, trace = [], { replay = false } = {}) {
   $("limitationsList").innerHTML = limitations.length
     ? [...new Set(limitations)].map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : "<li>No major source limitation or evidence conflict was recorded.</li>";
+}
+
+function runProgressMessage(run, fallback) {
+  return run.current_node === "counterfactual_evidence_test"
+    ? "Running Counterfactual Evidence Test: checking support after removing selected evidence."
+    : run.message || fallback;
 }
 
 function renderCounterfactual(result) {
