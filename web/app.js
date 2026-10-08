@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261009-models1";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-qwen1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -42,13 +42,13 @@ const BENCHMARK_METRICS = [
   ["Numeric traceability errors", data => data.numeric_error_rate_pct, "%", "Unsupported currency or percentage claims / measured claims; lower is better"],
   ["Completion", data => data.completion_rate_pct, "%", "Reports completed / submitted benchmark cases"],
   ["Average runtime", data => data.runtime?.average_ms, "ms", "End-to-end average per benchmark case"],
-  ["Model calls", data => data.model_calls?.average_per_task, "calls / task", "Average Ollama calls per benchmark question"],
+  ["Model calls", data => data.model_calls?.average_per_task, "calls / task", "Average model calls per benchmark question"],
   ["Token usage", data => data.token_and_cost?.average_tokens_per_task, "tokens / task", "Generation tokens per task; local Ollama has no metered API fee"],
 ];
 
 function metricCard(label, value, unit, detail) {
   const hasValue = value !== null && value !== undefined && Number.isFinite(Number(value));
-  const display = hasValue ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "N/A";
+  const display = hasValue ? Number(value).toLocaleString(undefined, { maximumFractionDigits: unit === "USD" ? 6 : 2 }) : "N/A";
   return `<article class="evaluation-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(display)}${hasValue && unit === "%" ? "%" : ""}</strong><small>${escapeHtml(unit === "%" ? detail : `${unit} · ${detail}`)}</small></article>`;
 }
 
@@ -68,6 +68,7 @@ function showRunMetrics(report, replay = false) {
     metricCard("Runtime", elapsed == null ? null : elapsed / 1000, "seconds", "End-to-end analysis time"),
     metricCard("Model calls", usage.total, "calls", "Calls recorded for this run"),
     metricCard("Token usage", usage.total_tokens, "tokens", "Recorded model token usage"),
+    metricCard("API cost estimate", usage.metered_api_cost_usd, "USD", `${apiCostText(usage.metered_api_cost_usd, usage.api_cost_unreported_calls)} · Usage × recorded rates; excludes credits and taxes.`),
     metricCard("Evidence collected", evidence.length, "items", "Normalized evidence in this report"),
   ].join("");
   $("evaluationPanel").hidden = false;
@@ -108,6 +109,7 @@ async function loadMetricsDashboard() {
       metricCard("Average runtime", data.average_runtime_ms, "ms", "Measured runs only; older reports predate instrumentation"),
       metricCard("Model calls", data.model_calls_total, "calls", "Across the saved runs with recorded usage"),
       metricCard("Tokens", data.tokens_total, "tokens", "Generation usage across measured saved runs"),
+      metricCard("API cost estimate", data.metered_api_cost_usd, "USD", `Reported usage × recorded rates; ${data.api_cost_unreported_calls || 0} calls with unknown cost. Excludes credits and taxes.`),
     ].join("");
   } else {
     $("serviceMetricsMeta").textContent = `Service metrics unavailable: ${service.reason?.message || "request failed"}`;
@@ -300,21 +302,20 @@ async function loadModels() {
     const auto = document.createElement("option");
     auto.value = "auto";
     auto.textContent = `Auto (${payload.auto_selected || "best available"})`;
+    auto.disabled = payload.default_available === false;
     select.append(auto);
     for (const model of payload.models || []) {
       const option = document.createElement("option");
       option.value = model.name;
-      option.textContent = `${model.label || model.name}${model.available === false ? " (unavailable)" : ""}`;
+      option.textContent = `${model.label || model.name}${model.status === "missing_api_key" ? " (API key required)" : model.available === false ? " (unavailable)" : ""}`;
       option.disabled = model.available === false;
       select.append(option);
     }
     $("ollamaDot").classList.toggle("online", Boolean(payload.success));
-    $("llmStatus").textContent = payload.success
-      ? `Default: ${payload.auto_selected}. ${(payload.models || []).filter(model => model.available !== false).length} models available.${payload.default_available === false ? " Default model unavailable; choose another model." : ""}`
-      : `Ollama unavailable. The graph will use deterministic fallbacks. ${payload.error || ""}`;
+    $("llmStatus").textContent = `Default: ${payload.auto_selected || "auto"}. ${payload.default_available === false ? "Default model unavailable; configure the Qwen API key or select an available model. " : ""}${(payload.models || []).some(model => model.provider === "qwen_api") ? "API availability reflects key configuration; model access is validated on each call." : payload.success ? "Ollama connected." : "Ollama unavailable."}`;
   } catch (error) {
     $("ollamaDot").classList.remove("online");
-    $("llmStatus").textContent = `Ollama check failed: ${error.message}. Deterministic fallback remains available.`;
+    $("llmStatus").textContent = `Model configuration check failed: ${error.message}.`;
   }
 }
 
@@ -529,7 +530,7 @@ function beginRunUi() {
   $("analyzeButton").classList.add("is-running");
   $("analyzeButton").querySelector(".button-label").textContent = "Agent is analyzing...";
   $("runningTitle").textContent = "Agent is working";
-  $("runningMessage").textContent = "Understanding the ordinary question with local Ollama...";
+  $("runningMessage").textContent = "Understanding your question with the selected model...";
   renderTimeline("nodeTimeline", [], "running", "understand_request");
   renderStages([], "understand_request");
   renderLiveSources({});
@@ -802,7 +803,7 @@ function renderLlmCalls(llm = {}) {
     : "Input/output token usage was not recorded. Generation usage excludes embeddings.";
   const tokenText = value => numericValue(value) === null ? "N/A" : Number(value).toLocaleString();
   $("llmCalls").innerHTML = calls.length
-    ? calls.map((call, index) => `<article class="llm-call"><div><strong>${index + 1}. ${escapeHtml(NODE_LABELS[call.node] || call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Input tokens</dt><dd>${tokenText(usages[index].input)}</dd></div><div><dt>Output tokens</dt><dd>${tokenText(usages[index].output)}</dd></div><div><dt>Total tokens</dt><dd>${tokenText(usages[index].total)}</dd></div></dl><strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to Ollama</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
+    ? calls.map((call, index) => `<article class="llm-call"><div><strong>${index + 1}. ${escapeHtml(NODE_LABELS[call.node] || call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Input tokens</dt><dd>${tokenText(usages[index].input)}</dd></div><div><dt>Output tokens</dt><dd>${tokenText(usages[index].output)}</dd></div><div><dt>Total tokens</dt><dd>${tokenText(usages[index].total)}</dd></div><div><dt>API cost estimate</dt><dd>${escapeHtml(apiCostText(call.usage?.metered_api_cost_usd, call.usage?.provider === "qwen_api" && call.usage?.metered_api_cost_usd == null ? 1 : 0))}</dd></div></dl>${call.usage?.pricing ? `<small>Rates per 1M tokens: $${escapeHtml(call.usage.pricing.input_usd_per_million_tokens)} input / $${escapeHtml(call.usage.pricing.output_usd_per_million_tokens)} output · ${escapeHtml(call.usage.pricing.mode)}</small>` : ""}<strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to model</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
     : '<div class="empty-evidence">No LLM call record is available.</div>';
 }
 
@@ -817,11 +818,11 @@ function renderExecutionBrief(report) {
     : summary.memoryRead ? "Embedding details available in the saved tool result, when recorded." : "Memory not queried for this task.";
   const metrics = [
     ["Tool calls", `${summary.toolSuccess} / ${summary.calls.length} succeeded`, "Actual calls, including retries and memory writes."],
-    ["Local LLM", `${summary.llmSuccess} / ${summary.llmCalls.length} succeeded`, `${summary.failedLlm} fallback calls · ${summary.repaired} thesis repair passes`],
+    ["LLM", `${summary.llmSuccess} / ${summary.llmCalls.length} succeeded`, `${summary.failedLlm} fallback calls · ${summary.repaired} thesis repair passes`],
     ["Historical RAG", `${summary.memoryUsed} / 3 chunks used`, embeddingText],
     ["Feedback loop", `${summary.retryCount} retrieval retries`, applicableChecks.length ? `${applicableChecks.filter(check => check.status === "pass").length} / ${applicableChecks.length} applicable final checks passed` : "Individual checks not recorded"],
     ["Runtime", report.observability?.total_duration_ms != null ? `${(report.observability.total_duration_ms / 1000).toFixed(1)} s` : "Unavailable", `${report.observability?.node_executions ?? 0} node executions`],
-    ["Model usage", `${report.observability?.model_calls?.total_tokens ?? 0} tokens`, `${report.observability?.model_calls?.total ?? summary.llmCalls.length} calls · $${Number(report.observability?.model_calls?.metered_api_cost_usd || 0).toFixed(4)} metered API fee`],
+    ["Model usage", `${report.observability?.model_calls?.total_tokens ?? 0} tokens`, `${report.observability?.model_calls?.total ?? summary.llmCalls.length} calls · ${apiCostText(report.observability?.model_calls?.metered_api_cost_usd, report.observability?.model_calls?.api_cost_unreported_calls)} API cost estimate`],
   ];
   $("executionMetrics").innerHTML = metrics.map(([label, value, detail]) =>
     `<div class="execution-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></div>`

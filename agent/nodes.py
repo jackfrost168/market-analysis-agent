@@ -520,9 +520,9 @@ As-of time: {as_of}
         asset = resolve_asset(asset_input or understood.get("asset") or "", query)
         selected_model = result.model
         explanation = (
-            "The local Ollama model understood the normal question and extracted the asset, task, horizon, and requirements."
+            "The selected model understood the question and extracted the asset, task, horizon, and requirements."
             if result.success
-            else "Ollama was unavailable or returned an invalid result, so local request-understanding rules were used."
+            else "The model was unavailable or returned an invalid result, so local request-understanding rules were used."
         )
         if task_rule_override:
             explanation += f" An explicit task phrase fixed the route as {explicit_task.replace('_', ' ')}."
@@ -565,7 +565,7 @@ As-of time: {as_of}
                         "Task type must be one of the fixed supported labels.",
                         "Unambiguous task phrases override a conflicting LLM task label.",
                         "As-of time is normalized to UTC.",
-                        "A deterministic classifier is used if structured Ollama output fails.",
+                        "A deterministic classifier is used if structured model output fails.",
                     ],
                     {
                         "interpreted_request": query,
@@ -1659,7 +1659,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
                 if isinstance(limitation, str)
             )
         if any(not call.get("success") for call in state.get("llm_calls") or []):
-            limitations.append("At least one Ollama step failed and used a deterministic fallback.")
+            limitations.append("At least one model step failed and used a deterministic fallback.")
         report = {
             "run_id": state["run_id"],
             "conversation_id": state["conversation_id"],

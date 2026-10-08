@@ -32,7 +32,7 @@ class RunManager:
                 "revision": 0,
                 "queued_at": queued_at,
                 "current_node": "understand_request",
-                "message": "Understanding the ordinary question with local Ollama...",
+                "message": "Understanding your question with the selected model...",
                 "node_trace": [],
                 "decision_audit": [],
                 "intermediate_results": [],
@@ -60,7 +60,7 @@ class RunManager:
                     "revision": self._runs[run_id].get("revision", 0) + 1,
                     "started_at": started_at,
                     "current_node": "understand_request",
-                    "message": "Understanding the ordinary question with local Ollama...",
+                    "message": "Understanding your question with the selected model...",
                 }
             )
 
@@ -70,7 +70,7 @@ class RunManager:
             snapshot = {
                 "status": "running",
                 "current_node": next_node_for_state(state),
-                "message": latest.get("summary") if latest else "Understanding your question with local Ollama...",
+                "message": latest.get("summary") if latest else "Understanding your question with the selected model...",
                 "node_trace": trace,
                 "decision_audit": state.get("decision_audit") or [],
                 "intermediate_results": state.get("intermediate_results") or [],

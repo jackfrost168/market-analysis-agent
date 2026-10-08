@@ -53,7 +53,7 @@ class AgentService:
 
     def _initial_state(self, payload: Dict[str, Any], run_id: str) -> Dict[str, Any]:
         if isinstance(self.llm, OllamaClient):
-            self.llm.validate_model(payload.get("model"))
+            self.llm.validate_request(payload.get("model"))
         if "enable_counterfactual_evidence_test" in payload:
             counterfactual_enabled(payload["enable_counterfactual_evidence_test"])
         asset_input = str(payload.get("asset") or payload.get("asset_input") or "").strip()

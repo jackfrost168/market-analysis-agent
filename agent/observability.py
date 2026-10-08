@@ -27,6 +27,9 @@ def build_run_metrics(
         for call in llm_calls
         if (call.get("usage") or {}).get("estimated_equivalent_cost_usd") is not None
     ]
+    costs = [(call.get("usage") or {}).get("metered_api_cost_usd") for call in llm_calls]
+    unreported = sum((call.get("usage") or {}).get("provider") == "qwen_api"
+                     and (call.get("usage") or {}).get("metered_api_cost_usd") is None for call in llm_calls)
     node_durations = [
         {"node": item.get("node"), "duration_ms": int(item.get("duration_ms") or 0)}
         for item in node_trace
@@ -52,13 +55,14 @@ def build_run_metrics(
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": prompt_tokens + completion_tokens,
-            "metered_api_cost_usd": 0.0,
+            "metered_api_cost_usd": round(sum(float(cost) for cost in costs if cost is not None), 8),
+            "api_cost_unreported_calls": unreported,
             "estimated_equivalent_cost_usd": (
                 round(sum(float(value) for value in equivalent_costs), 8)
                 if equivalent_costs
                 else None
             ),
-            "cost_note": "Local Ollama has no metered token fee. Configured API-equivalent pricing excludes hardware and electricity.",
+            "cost_note": "API cost is an estimate from provider-reported usage and recorded token rates, not an invoice. Unknown usage is excluded. Credits, taxes, embeddings, hardware and electricity are excluded. Local Ollama has no metered token fee.",
         },
         "retrieval_attempts": int(state.get("retrieval_attempts") or 0),
         "evidence_coverage_pct": int((state.get("evidence_gate") or {}).get("coverage_pct") or 0),
@@ -76,7 +80,7 @@ def aggregate_run_metrics(states: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     durations = [value for value in durations if value > 0]
     model_calls = [
         ((state.get("state") or {}).get("run_metrics") or {}).get("model_calls") or {}
-        for state in completed
+        for state in states
     ]
     return {
         "persisted_runs": len(states),
@@ -86,7 +90,8 @@ def aggregate_run_metrics(states: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         "average_runtime_ms": round(mean(durations)) if durations else None,
         "model_calls_total": sum(int(item.get("total") or 0) for item in model_calls),
         "tokens_total": sum(int(item.get("total_tokens") or 0) for item in model_calls),
-        "metered_api_cost_usd": 0.0,
+        "metered_api_cost_usd": round(sum(_number(item.get("metered_api_cost_usd")) for item in model_calls), 8),
+        "api_cost_unreported_calls": sum(int(item.get("api_cost_unreported_calls") or 0) for item in model_calls),
         "estimated_equivalent_cost_usd": (
             round(sum(float(item["estimated_equivalent_cost_usd"]) for item in model_calls if item.get("estimated_equivalent_cost_usd") is not None), 8)
             if any(item.get("estimated_equivalent_cost_usd") is not None for item in model_calls)

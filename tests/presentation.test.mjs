@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { numericValue, modelTokenUsage, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+import { numericValue, modelTokenUsage, apiCostText, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+
+test("API costs keep small dollar amounts visible and unknown costs explicit", () => {
+  assert.equal(apiCostText(0.000503), "$0.000503");
+  assert.equal(apiCostText(0), "$0.000000");
+  assert.equal(apiCostText(null), "Unreported");
+  assert.equal(apiCostText(0.000503, 1), "$0.000503 + unknown cost (1 calls)");
+  assert.equal(modelTokenUsage({ success: true, usage: { usage_reported: false, prompt_tokens: 0, completion_tokens: 0 } }).measured, false);
+});
 
 test("missing prices remain missing rather than becoming zero", () => {
   for (const value of [null, undefined, "", false, "bad", Infinity]) assert.equal(numericValue(value), null);

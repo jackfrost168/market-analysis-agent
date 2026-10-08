@@ -18,6 +18,7 @@ export function numericValue(value) {
 }
 
 export function modelTokenUsage(call = {}) {
+  if (call.usage?.usage_reported === false) return { input: null, output: null, total: null, measured: false };
   const input = numericValue(call.usage?.prompt_tokens);
   const output = numericValue(call.usage?.completion_tokens);
   const recordedTotal = numericValue(call.usage?.total_tokens);
@@ -26,6 +27,12 @@ export function modelTokenUsage(call = {}) {
   }
   const measured = input !== null && output !== null;
   return { input, output, total: recordedTotal ?? (measured ? input + output : null), measured };
+}
+
+export function apiCostText(cost, unreported = 0) {
+  const value = numericValue(cost);
+  const text = value === null ? "Unreported" : `$${value.toFixed(6)}`;
+  return unreported ? `${text} + unknown cost (${unreported} calls)` : text;
 }
 
 export function stageStates(trace = [], currentNode, status = "running") {

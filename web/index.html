@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Market Research Agent | Evidence to insight</title>
-  <meta name="description" content="Local financial research with task-aware tools, persistent memory, and traceable decisions.">
+  <meta name="description" content="Financial research with task-aware tools, persistent memory, and traceable decisions.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260930-4">
-  <link rel="stylesheet" href="/presentation.css?v=20261009-models1">
+  <link rel="stylesheet" href="/presentation.css?v=20261009-qwen1">
 </head>
 <body>
   <div class="page-shell">
     <header class="hero interview-hero">
       <div class="hero-copy">
         <div>
-          <p class="eyebrow">Market Research Agent / Local intelligence</p>
+          <p class="eyebrow">Market Research Agent / Evidence-backed intelligence</p>
           <h1>One question.<br><em>A traceable answer.</em></h1>
           <p class="hero-text">Chooses relevant tools, recalls prior evidence, and checks its conclusions. Follow the decisions behind every report.</p>
           <div class="hero-badges"><span>Task-aware tools</span><span>Persistent RAG</span><span>Bounded feedback loop</span></div>
@@ -77,7 +77,7 @@
               </details>
             </div>
           </details>
-          <div class="form-actions"><button id="analyzeButton" class="primary-button" type="submit"><span class="button-label">Run autonomous analysis</span></button><div class="model-readiness"><span id="ollamaDot" class="runtime-dot" aria-hidden="true"></span><span id="llmStatus" class="fetch-status">Checking local Ollama...</span></div></div>
+          <div class="form-actions"><button id="analyzeButton" class="primary-button" type="submit"><span class="button-label">Run autonomous analysis</span></button><div class="model-readiness"><span id="ollamaDot" class="runtime-dot" aria-hidden="true"></span><span id="llmStatus" class="fetch-status">Checking model configuration...</span></div></div>
         </form>
       </section>
 
@@ -157,9 +157,9 @@
       </section>
     </main>
     <details class="panel architecture-panel interview-architecture"><summary>Under the hood: the nine-node LangGraph workflow</summary><p class="support-text">The four stages group nine execution nodes. Evidence gaps return to targeted retrieval, with a shared retry budget. A completed report may still carry limitations.</p><div id="architectureFlow" class="architecture-flow" aria-label="Agent workflow"></div></details>
-    <footer class="demo-footer">LangGraph orchestration · Local Ollama · SQLite vector memory · Observable tool calls</footer>
+    <footer class="demo-footer">LangGraph orchestration · Qwen API / Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
   <dialog id="evidenceDialog" class="evidence-dialog" aria-labelledby="evidenceDialogTitle"><div class="evidence-dialog-heading"><h3 id="evidenceDialogTitle">Referenced evidence</h3><button id="closeEvidenceDialog" class="ghost-button compact" type="button" autofocus>Close</button></div><p class="field-hint">Inspect the source behind this reference. A valid ID does not by itself prove that the source supports the claim.</p><div id="evidenceDialogContent"></div></dialog>
-  <script type="module" src="/app.js?v=20261009-models1"></script>
+  <script type="module" src="/app.js?v=20261009-qwen1"></script>
 </body>
 </html>
