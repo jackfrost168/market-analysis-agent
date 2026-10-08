@@ -93,40 +93,49 @@ AWS 本机 Ollama 使用 `127.0.0.1:11435`，原 Mac SSH 转发保留 `127.0.0.1
 
 服务 `.env` 中使用 `.env.example` 的 routes 示例；内存验证通过后将 `OLLAMA_MODEL` 设为 `qwen3:1.7b` 并重启 `financial-agent`。1.7B 路由禁用 thinking，8B 保留原调用参数。生成模型路由不会更改 embedding 端点、Vector DB 或已有报告。EC2 约 1 GiB 内存不足以正常运行此模型；swap 无法替代足够的物理内存，需要先升级内存容量并测量完整任务的延迟。
 
-## Qwen API 默认模型与费用
+## AWS Bedrock Converse 默认模型与费用
 
-生产配置现在提供 **Qwen API 8B（默认）**、**Qwen API 30B-A3B**、**Qwen3 8B (Mac)**。仅替换模型客户端；九节点工作流、证据检索、验证与可选反事实检查复用原接口。不会因 API 失败自动切换到 Mac。API 模式采用非思考 JSON 输出，并继续使用 Pydantic 验证；普通调用输出上限 4096 tokens，反事实调用保留 512 tokens 和原超时预算。
+当前提供 **Qwen3 32B (AWS Bedrock Converse，默认)** 和 **Qwen3 8B (Mac)**。阿里云外部 API 8B/30B 和其密钥录入脚本已经移除；不添加 Coder。九节点工作流、检索、验证、可选反事实检查与报告主体不变。
 
-服务器 `.env` 的配置如下（路由 JSON 使用一整行，systemd 中外层单引号保留 JSON 引号）：
+### 服务器配置
+
+安装 requirements.txt 的 boto3 依赖；不要在项目中保存 AWS 长期访问密钥。EC2 使用 IAM 实例角色及 SDK 自动获得的临时凭证。服务器 .env 如下（routes JSON 为一整行，systemd 外层单引号保留 JSON 引号）：
 
 ```dotenv
-OLLAMA_MODEL=qwen3-8b
-OLLAMA_MODEL_ROUTES='{"qwen3-8b":{"provider":"qwen_api","base_url":"https://dashscope-us.aliyuncs.com/compatible-mode/v1","label":"Qwen API 8B"},"qwen3-30b-a3b":{"provider":"qwen_api","base_url":"https://dashscope-us.aliyuncs.com/compatible-mode/v1","label":"Qwen API 30B-A3B"},"qwen3:8b":{"base_url":"http://127.0.0.1:11434","label":"Qwen3 8B (Mac)"}}'
-QWEN_API_BASE_URL=https://dashscope-us.aliyuncs.com/compatible-mode/v1
-QWEN_API_PRICING_JSON='{"qwen3-8b":{"input":0.072,"output":0.287},"qwen3-30b-a3b":{"input":0.108,"output":0.431}}'
+OLLAMA_MODEL=qwen.qwen3-32b-v1:0
+OLLAMA_MODEL_ROUTES='{"qwen.qwen3-32b-v1:0":{"provider":"bedrock","region":"us-east-1","label":"Qwen3 32B (AWS Bedrock Converse)"},"qwen3:8b":{"base_url":"http://127.0.0.1:11434","label":"Qwen3 8B (Mac)"}}'
+BEDROCK_REGION=us-east-1
+BEDROCK_PRICING_JSON='{"qwen.qwen3-32b-v1:0":{"input":0.15,"output":0.60}}'
 ```
 
-### 申请与录入密钥
+调用 SDK 的 bedrock-runtime.converse，使用 Qwen 原生模型 ID qwen.qwen3-32b-v1:0。Schema 放入提示词，回复继续由 Pydantic 校验。使用 /no_think 软指令请求非思考回复，不把它描述成服务端强制开关；服务商返回的全部输出 tokens（包括可能的推理 tokens）均计费。普通调用最多 4096 输出 tokens，反事实调用保留原 512 tokens 与时间预算。SDK 不自动重试，不因 Bedrock 失败改用另一个提供商；原工作流已有的确定性 fallback 仍保留并记录失败。
 
-1. 打开 [Model Studio 控制台](https://modelstudio.console.alibabacloud.com/)，注册/登录并开通服务。
-2. 选 **US (Virginia)** → **API Key** → **Create API Key**，使用按量付费 key，复制并保存。Coding Plan / Token Plan 专用 key 不能替代此 key。按账户提示完成开通及计费设置。
-3. 在 Mac 终端登录现有 EC2，然后执行安全配置脚本：
+### 绑定 EC2 IAM 角色
+
+1. AWS 控制台 → IAM → Roles → Create role → AWS service → EC2，创建 FinancialAgentBedrockConverse 角色。
+2. 在角色中添加 inline policy，使用同目录 bedrock-invoke-policy.json 的 JSON。它仅允许 bedrock:InvokeModel 到 us-east-1 的 Qwen3-32B；这是 Converse 所需权限，不给 EC2 管理 IAM 的权限。
+3. EC2 控制台 → us-east-1 → 找到当前 financial-agent 实例 → Actions → Security → Modify IAM role → 绑定上述角色。
+4. 如果首次调用提示模型订阅/访问问题，用有账户管理权限的用户打开 Bedrock Model catalog，确认 Qwen3-32B 的账户访问及计费条件。不要创建 provisioned throughput 或自部署 Marketplace 端点；本项目使用原生按量推理。
+5. 在 Mac 终端执行：
 
 ```bash
 ssh -i "$HOME/.ssh/financial-agent.pem" ec2-user@100.59.221.40
 cd /home/ec2-user/financial-agent
-python3 awsdeploy/configure_qwen_api.py
-sudo systemctl restart financial-agent
+.venv/bin/python awsdeploy/check_bedrock.py
 ```
 
-脚本在交互式终端隐藏密钥输入，先向 8B 和 30B 各发一次极短请求验证访问，再写入权限为 0600 的 `.env`。这两次探测按量计费。API key 不进入前端、Git 或应用日志；备份放在仓库外的 `~/.config/financial-agent/backups/`。有分析任务在运行时，脚本会要求稍后重试。配置后可检查 `curl http://127.0.0.1:8001/api/models`；该接口不会返回密钥，API 列表的 configured 仅表示密钥已配置，并非持续健康检查。
+此脚本会发一次极短的真实模型请求，按量计费；success:true 表示 SDK、IAM、模型访问及结构化回复已验证。不写入分析数据库，不输出凭证。IAM 角色绑定不要求重启 EC2；页面刷新即可重新检查凭证来源。/api/models 的 credentials_configured 仅表示 SDK 找到凭证，不代表模型权限已确认。
 
-4. 刷新网页，展开 **Model, horizon & advanced options → Model**。Auto 使用 API 8B，也可选 API 30B-A3B 或 Mac 8B。缺少 key 时 API 选项禁用，提交 Auto 会立即提示配置缺失，不生成假成功报告。Mac 选项仍可用，但需要 Ollama 与 SSH 隧道。
+缺少角色时 API 选项显示 AWS IAM role required，提交 Auto 在入队前被拒绝。仍可手动选 Mac 8B；Mac Ollama 与 SSH 隧道需在线。真实推理的 AccessDenied、超时或输出校验错误显示在 LLM calls 中。
 
-### 费用统计
+### 保留与更新费用统计
 
-每个调用保存提供商返回的输入/输出 tokens、当时的输入/输出单价、非思考模式与计价来源。公式：`费用估算 = 输入 tokens × 输入单价 / 1,000,000 + 输出 tokens × 输出单价 / 1,000,000`。每次任务汇总所有调用，包括修复与反事实调用；输出校验失败但已有 usage 时也计入。超时等无 usage 的调用标记为 unknown，不冒充零费用。已完成与失败任务的费用都进入 saved run statistics。
+现有历史报告及费用不删除、不重新计价。新 Bedrock 调用使用 usage.inputTokens 和 usage.outputTokens，保存单次调用用量、当时输入/输出单价、区域和 standard_converse 计价模式。单次费用估算 = 输入 tokens × 输入单价 / 1,000,000 + 输出 tokens × 输出单价 / 1,000,000。
 
-网页在 **Measure**、运行摘要和折叠的 **LLM calls: models, prompts & fallbacks** 中显示费用。美元数值保留最多六位小数；unknown 调用数量单独显示。该值是按实际 usage 和配置单价计算的列表价估算，不是已扣款账单，不包含免费额度、折扣、税费、embedding 或服务器费用。Mac Ollama 的 metered API cost 为零，硬件与电费另计。切换模型不会改写历史报告或原有 14 条 benchmark；API 模型性能需重新评测。
+报告汇总原分析、修复与反事实调用；输出验证失败但已返回 usage 的调用也计入；超时等未返回 usage 的调用标为 unknown。已完成与失败的历史任务都进入 saved run statistics。原阿里云调用的历史记录仍按它原本存储的费用汇总。Mac Ollama 的 API token 费用为 0。
 
-默认单价来自 [Model Studio 官方价格表](https://www.alibabacloud.com/help/en/model-studio/model-pricing) 的 Virginia / Global / 非思考模式（2026-10-09）。更换区域或官方调价时，应修改 `QWEN_API_PRICING_JSON`，避免估算失真。端点与 key 区域对应关系见 [官方兼容接口说明](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope)。
+网页在 Measure、运行摘要和折叠的 LLM calls 中显示费用；小金额保留最多六位小数。费用是按实际 usage 与保存单价计算的列表价估算，不是 AWS 扣款账单，排除免费额度、折扣、税、embedding、服务器、电费等。
+
+单价为 us-east-1 标准按量推理：每百万输入 $0.15，输出 $0.60（2026-10-09 查询，官方价目发布于 2026-10-06）。更换区域、模型或服务层级时修改 BEDROCK_PRICING_JSON。当前代码仅请求标准推理，不开启 prompt cache 或 Flex；不能套用其折扣单价。
+
+参考：[模型 ID 与区域](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-qwen-qwen3-32b.html)、[Converse 接口](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)、[官方区域价格数据](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/us-east-1/index.json)。

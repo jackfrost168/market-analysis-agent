@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-qwen2";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-bedrock1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -307,13 +307,13 @@ async function loadModels() {
     for (const model of payload.models || []) {
       const option = document.createElement("option");
       option.value = model.name;
-      option.textContent = `${model.label || model.name}${model.status === "missing_api_key" ? " (API key required)" : model.available === false ? " (unavailable)" : ""}`;
+      option.textContent = `${model.label || model.name}${model.status === "missing_aws_credentials" ? " (AWS IAM role required)" : model.available === false ? " (unavailable)" : ""}`;
       option.disabled = model.available === false;
       select.append(option);
     }
     select.value = "auto";
     $("ollamaDot").classList.toggle("online", Boolean(payload.success));
-    $("llmStatus").textContent = `Default: ${payload.auto_selected || "auto"}. ${payload.default_available === false ? "Default model unavailable; configure the Qwen API key or select an available model. " : ""}${(payload.models || []).some(model => model.provider === "qwen_api") ? "API availability reflects key configuration; model access is validated on each call." : payload.success ? "Ollama connected." : "Ollama unavailable."}`;
+    $("llmStatus").textContent = `Default: ${payload.auto_selected || "auto"}. ${payload.default_available === false ? "Default model unavailable; attach the AWS Bedrock IAM role or select Mac 8B. " : ""}${(payload.models || []).some(model => model.provider === "bedrock") ? "Bedrock status reflects AWS credential availability; IAM and model access are validated on each call." : payload.success ? "Ollama connected." : "Ollama unavailable."}`;
   } catch (error) {
     $("ollamaDot").classList.remove("online");
     $("llmStatus").textContent = `Model configuration check failed: ${error.message}.`;
@@ -804,7 +804,7 @@ function renderLlmCalls(llm = {}) {
     : "Input/output token usage was not recorded. Generation usage excludes embeddings.";
   const tokenText = value => numericValue(value) === null ? "N/A" : Number(value).toLocaleString();
   $("llmCalls").innerHTML = calls.length
-    ? calls.map((call, index) => `<article class="llm-call"><div><strong>${index + 1}. ${escapeHtml(NODE_LABELS[call.node] || call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Input tokens</dt><dd>${tokenText(usages[index].input)}</dd></div><div><dt>Output tokens</dt><dd>${tokenText(usages[index].output)}</dd></div><div><dt>Total tokens</dt><dd>${tokenText(usages[index].total)}</dd></div><div><dt>API cost estimate</dt><dd>${escapeHtml(apiCostText(call.usage?.metered_api_cost_usd, call.usage?.provider === "qwen_api" && call.usage?.metered_api_cost_usd == null ? 1 : 0))}</dd></div></dl>${call.usage?.pricing ? `<small>Rates per 1M tokens: $${escapeHtml(call.usage.pricing.input_usd_per_million_tokens)} input / $${escapeHtml(call.usage.pricing.output_usd_per_million_tokens)} output · ${escapeHtml(call.usage.pricing.mode)}</small>` : ""}<strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to model</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
+    ? calls.map((call, index) => `<article class="llm-call"><div><strong>${index + 1}. ${escapeHtml(NODE_LABELS[call.node] || call.node || "LLM step")}</strong><span class="source-chip ${call.success ? "success" : "failed"}">${call.success ? "structured output" : "fallback"}</span></div><p>${escapeHtml(call.purpose || "")}</p><dl><div><dt>Model</dt><dd>${escapeHtml(call.model || "--")}</dd></div><div><dt>Latency</dt><dd>${escapeHtml(call.latency_ms ?? "--")} ms</dd></div><div><dt>Input tokens</dt><dd>${tokenText(usages[index].input)}</dd></div><div><dt>Output tokens</dt><dd>${tokenText(usages[index].output)}</dd></div><div><dt>Total tokens</dt><dd>${tokenText(usages[index].total)}</dd></div><div><dt>API cost estimate</dt><dd>${escapeHtml(apiCostText(call.usage?.metered_api_cost_usd, ["bedrock", "qwen_api"].includes(call.usage?.provider) && call.usage?.metered_api_cost_usd == null ? 1 : 0))}</dd></div></dl>${call.usage?.pricing ? `<small>Rates per 1M tokens: $${escapeHtml(call.usage.pricing.input_usd_per_million_tokens)} input / $${escapeHtml(call.usage.pricing.output_usd_per_million_tokens)} output · ${escapeHtml(call.usage.pricing.mode)}</small>` : ""}<strong class="audit-subtitle">Input manifest</strong><pre>${escapeHtml(JSON.stringify(call.input_manifest || {}, null, 2))}</pre>${call.prompt_preview ? `<details class="llm-prompt-preview"><summary>Actual prompt sent to model</summary><pre>${escapeHtml(call.prompt_preview)}</pre></details>` : ""}${call.error ? `<small>${escapeHtml(call.error)}</small>` : ""}</article>`).join("")
     : '<div class="empty-evidence">No LLM call record is available.</div>';
 }
 

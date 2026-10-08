@@ -110,18 +110,23 @@ class OllamaClient:
         if not isinstance(self.model_routes, dict):
             raise ValueError("OLLAMA_MODEL_ROUTES must be a JSON object")
         for name, route in self.model_routes.items():
-            if not isinstance(route, dict) or not str(route.get("base_url", "")).startswith(("http://", "https://")):
-                raise ValueError(f"Invalid Ollama route for {name}")
-            if route.get("provider", "ollama") not in {"ollama", "qwen_api"}:
+            if not isinstance(route, dict):
+                raise ValueError(f"Invalid model route for {name}")
+            if route.get("provider", "ollama") not in {"ollama", "bedrock"}:
                 raise ValueError(f"Invalid model provider for {name}")
+            if route.get("provider", "ollama") == "ollama" and not str(route.get("base_url", "")).startswith(("http://", "https://")):
+                raise ValueError(f"Invalid Ollama route for {name}")
 
     def validate_request(self, requested: Optional[str]) -> None:
         if not self.model_routes:
             return
         selected = self.choose_model(requested)
         route = self.model_routes.get(selected, {})
-        if route.get("provider") == "qwen_api" and not os.environ.get("DASHSCOPE_API_KEY", "").strip():
-            raise ValueError("Qwen API key is not configured on the server. Select Qwen3 8B (Mac) or configure DASHSCOPE_API_KEY.")
+        if route.get("provider") == "bedrock":
+            from .bedrock import credential_status
+            status = credential_status()
+            if not status["available"]:
+                raise ValueError(status["error"] + ". Select Qwen3 8B (Mac) or attach the EC2 Bedrock IAM role.")
 
     def validate_model(self, requested: Optional[str]) -> None:
         if self.model_routes and requested not in (None, "", "auto") and requested not in self.model_routes:
@@ -137,12 +142,11 @@ class OllamaClient:
             models = []
             inventories = {}
             for name, route in self.model_routes.items():
-                if route.get("provider") == "qwen_api":
-                    configured = bool(os.environ.get("DASHSCOPE_API_KEY", "").strip())
+                if route.get("provider") == "bedrock":
+                    from .bedrock import credential_status
+                    status = credential_status()
                     models.append({"name": name, "label": route.get("label") or name,
-                                   "available": configured, "provider": "qwen_api",
-                                   "status": "configured" if configured else "missing_api_key",
-                                   "error": None if configured else "Qwen API key not configured"})
+                                   "provider": "bedrock", **status})
                     continue
                 url = route["base_url"].rstrip("/") + "/api/tags"
                 if url not in inventories:
@@ -215,9 +219,9 @@ class OllamaClient:
         selected_model = self.choose_model(model)
         route = self.model_routes.get(selected_model, {})
         effective_timeout = timeout_seconds if timeout_seconds is not None else route.get("timeout_seconds", self.timeout_seconds)
-        if route.get("provider") == "qwen_api":
-            from .qwen_api import generate_qwen
-            return generate_qwen(
+        if route.get("provider") == "bedrock":
+            from .bedrock import generate_bedrock
+            return generate_bedrock(
                 prompt, response_model, selected_model, route,
                 temperature=temperature, timeout_seconds=effective_timeout,
                 max_output_tokens=max_output_tokens,

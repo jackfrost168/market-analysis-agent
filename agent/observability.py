@@ -28,7 +28,7 @@ def build_run_metrics(
         if (call.get("usage") or {}).get("estimated_equivalent_cost_usd") is not None
     ]
     costs = [(call.get("usage") or {}).get("metered_api_cost_usd") for call in llm_calls]
-    unreported = sum((call.get("usage") or {}).get("provider") == "qwen_api"
+    unreported = sum((call.get("usage") or {}).get("provider") in {"qwen_api", "bedrock"}
                      and (call.get("usage") or {}).get("metered_api_cost_usd") is None for call in llm_calls)
     node_durations = [
         {"node": item.get("node"), "duration_ms": int(item.get("duration_ms") or 0)}
