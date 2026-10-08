@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261002-1";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage } from "./presentation.mjs?v=20261008-cf2";
 
 const NODE_ORDER = [
   "understand_request",
