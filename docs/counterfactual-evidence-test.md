@@ -123,3 +123,27 @@ and judgments are illustrative, not benchmark accuracy or a latency guarantee.
 This is an additional LLM judgment, not a calibrated or independently certified
 semantic verifier. A sensitivity result can be wrong; test it on labelled examples
 before treating it as a quality metric.
+
+## Reading the report comparison
+
+The English, collapsed **Counterfactual Evidence Test** panel shows the original
+saved conclusion, its support with all linked evidence, and a separate comparison
+for each removed item: **With all supporting evidence** versus **Without this
+evidence**. It explains whether the same conclusion remains supported, weakens,
+or loses support. The module does not generate a replacement conclusion.
+
+Default scope is one main conclusion and up to three key evidence removals;
+`COUNTERFACTUAL_MAX_CLAIMS=2` permits up to two conclusions. The selection can
+choose fewer. The panel counts selected conclusions and completed removals, and
+new reports record the eligible candidate count and configured limit. This is
+not a test of every claim or every evidence item in the report.
+
+Evidence excerpts, remaining evidence IDs, and the model reason are available in
+an inner disclosure. New state/report fields add only scope counts and evidence
+IDs; raw documents are not copied into counterfactual state. Older reports reuse
+saved call manifests when available and leave unknown scope information absent.
+
+**Supporting** means removing the item produced little change; other evidence
+may cover the same conclusion. It does not mean the evidence is useless. Failed
+removals are explicitly unclassified. A thesis-generation fallback is disclosed
+so the reader knows the test evaluates the saved report's conclusion.

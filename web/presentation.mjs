@@ -35,6 +35,44 @@ export function apiCostText(cost, unreported = 0) {
   return unreported ? `${text} + unknown cost (${unreported} calls)` : text;
 }
 
+export function summarizeCounterfactual(result = {}, report = {}) {
+  const supports = { strong: "Strong support", moderate: "Support with qualifications", weak: "Weak / incomplete support", unsupported: "Unsupported" };
+  const dependencyMeaning = {
+    Critical: "Critical: removing this evidence greatly weakens support, changes the thesis, or leaves it unsupported.",
+    Important: "Important: removing this evidence weakens support, but some support remains.",
+    Supporting: "Supporting: removing this evidence causes little change. Other evidence may cover the same conclusion.",
+  };
+  const evidenceById = new Map((report.evidence || []).map(item => [item.id, item]));
+  const calls = report.llm?.calls || [];
+  const claims = (result.claims || []).map(claim => ({
+    ...claim,
+    beforeLabel: supports[claim.original_support] || "Not recorded",
+    comparisons: (claim.evidence || []).map(item => {
+      const call = calls.find(call => call.node === "counterfactual_evidence_test" && call.claim_id === claim.claim_id && call.removed_evidence_id === item.evidence_id);
+      const remainingIds = item.remaining_evidence_ids || call?.input_manifest?.evidence_ids || null;
+      const completed = item.status === "completed" || (item.status == null && Boolean(supports[item.support_after]));
+      const outcomes = { strong: "The same conclusion remains strongly supported.", moderate: "The same conclusion remains supported, with qualifications.", weak: "Only weak or incomplete support remains for the same conclusion.", unsupported: "The remaining evidence no longer supports the same conclusion." };
+      return { ...item, completed,
+        afterLabel: completed ? supports[item.support_after] || "Not recorded" : "Not evaluated",
+        outcome: completed ? item.importance === "Critical" && item.support_after === "strong"
+          ? "Strong support was reported, but a material change was flagged. Inspect the model reason."
+          : outcomes[item.support_after] || "Support outcome not recorded." : "This removal could not be evaluated; no importance judgment is available.",
+        meaning: completed ? dependencyMeaning[item.importance] || "Dependency category not recorded." : "",
+        excerpt: String(evidenceById.get(item.evidence_id)?.content || "").slice(0, 180),
+        remainingIds,
+      };
+    }),
+  }));
+  return {
+    claims,
+    selectedClaims: claims.length,
+    completedTests: claims.reduce((count, claim) => count + claim.comparisons.filter(item => item.completed).length, 0),
+    candidateClaims: numericValue(result.scope?.candidate_claims),
+    maxClaims: numericValue(result.scope?.max_claims),
+    thesisGenerationFallback: [...calls].reverse().find(call => call.node === "generate_thesis_graph")?.success === false,
+  };
+}
+
 export function stageStates(trace = [], currentNode, status = "running") {
   const active = STAGES.findIndex(stage => stage.nodes.includes(currentNode));
   const visited = new Set(trace.map(item => item.node));

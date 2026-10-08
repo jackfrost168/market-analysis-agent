@@ -68,6 +68,12 @@ class CounterfactualTests(unittest.TestCase):
         self.assertEqual([item["importance"] for item in tests], ["Critical", "Critical", "Supporting"])
         self.assertEqual([item["impact"] for item in tests], ["high", "high", "low"])
         self.assertEqual(len(llm.requests), 4)  # one selection/baseline + three ablations
+        scope = result["counterfactual_tests"]["scope"]
+        self.assertEqual(scope["candidate_claims"], 1)
+        self.assertEqual(scope["selected_claims"], 1)
+        self.assertEqual(scope["completed_removal_tests"], 3)
+        self.assertEqual(result["evidence_dependency"][0]["supporting_evidence_ids"], ["E1", "E2", "E3"])
+        self.assertEqual(result["evidence_dependency"][0]["evidence"][0]["remaining_evidence_ids"], ["E2", "E3"])
         for removed, (payload, kwargs) in zip(["E1", "E2", "E3"], llm.requests[1:]):
             self.assertNotIn(removed, {item["id"] for item in payload["remaining_evidence"]})
             self.assertEqual(payload["claim"], state["thesis_graph"]["upside"]["scenario"])

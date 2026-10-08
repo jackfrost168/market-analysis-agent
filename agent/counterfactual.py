@@ -141,6 +141,7 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
     limits = Limits.from_env()
     deadline = started + limits.budget_seconds
     calls, tests, dependencies, errors = [], [], [], []
+    candidate_count = 0
     model = state.get("model")
     if not model or model == "auto":
         # Reuse the already resolved model rather than querying Ollama tags per ablation.
@@ -151,7 +152,12 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
     def finish(status):
         return {
             "counterfactual_tests": {"status": status, "tests": tests, "errors": errors,
-                                     "latency_ms": round((time.perf_counter() - started) * 1000), "note": NOTE},
+                                     "latency_ms": round((time.perf_counter() - started) * 1000), "note": NOTE,
+                                     "scope": {"candidate_claims": candidate_count,
+                                               "max_claims": limits.max_claims,
+                                               "max_evidence_per_claim": limits.max_evidence,
+                                               "selected_claims": len(dependencies),
+                                               "completed_removal_tests": sum(item["status"] == "completed" for item in tests)}},
             "evidence_dependency": dependencies,
             "llm_calls": calls,
         }
@@ -190,6 +196,7 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
                 bounded_candidates.append(candidate)
                 used_ids = combined
         candidates = bounded_candidates
+        candidate_count = len(candidates)
         if not candidates:
             errors.append("No bounded claim/evidence bundle is available for testing.")
             return finish("skipped")
@@ -237,6 +244,7 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
                 unique_ids.append(item)
             dependency = {"claim_id": selected.claim_id, "claim": claim["claim"],
                           "original_support": selected.original_support,
+                          "supporting_evidence_ids": claim["supporting_evidence_ids"],
                           "selected_evidence_ids": unique_ids, "evidence": [], "explanation": ""}
             dependencies.append(dependency)
             if selected.original_support == "unsupported":
@@ -276,6 +284,7 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
                 dependency["evidence"].append({"evidence_id": removed_id,
                     "title": str(evidence[removed_id].get("title") or removed_id)[:180],
                     "importance": test["importance"], "impact": test["impact"],
+                    "remaining_evidence_ids": remaining_ids,
                     "support_after": test["support_after"], "reason": test["reason"], "status": test["status"]})
                 LOGGER.info("counterfactual_evidence_test %s", json.dumps(test, ensure_ascii=False))
                 if test["status"] != "completed":
@@ -303,4 +312,5 @@ def run_counterfactual(llm: OllamaClient, state: Dict[str, Any]) -> Dict[str, An
 def report_section(update: Dict[str, Any]) -> Dict[str, Any]:
     test = update["counterfactual_tests"]
     return {"status": test["status"], "claims": update["evidence_dependency"],
-            "note": test["note"], "errors": test["errors"], "latency_ms": test["latency_ms"]}
+            "note": test["note"], "errors": test["errors"], "latency_ms": test["latency_ms"],
+            "scope": test.get("scope")}

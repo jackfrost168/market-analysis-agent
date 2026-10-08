@@ -1,6 +1,54 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { numericValue, modelTokenUsage, apiCostText, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+import { numericValue, modelTokenUsage, apiCostText, summarizeCounterfactual, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+
+test("counterfactual compares the same conclusion and counts only completed removals", () => {
+  const claim = "Revenue and margin improvement support the positive thesis.";
+  const summary = summarizeCounterfactual({scope: {candidate_claims: 3, max_claims: 1}, claims: [{claim_id: "upside", claim, original_support: "strong", evidence: [
+    {evidence_id: "E1", status: "completed", support_after: "unsupported", importance: "Critical", remaining_evidence_ids: ["E2"]},
+    {evidence_id: "E2", status: "failed", support_after: null, importance: null},
+  ]}]});
+  assert.equal(summary.claims[0].claim, claim);
+  assert.equal(summary.selectedClaims, 1);
+  assert.equal(summary.candidateClaims, 3);
+  assert.equal(summary.completedTests, 1);
+  assert.match(summary.claims[0].comparisons[0].outcome, /no longer supports/);
+  assert.equal(summary.claims[0].comparisons[1].afterLabel, "Not evaluated");
+  assert.equal(summary.claims[0].comparisons[1].meaning, "");
+});
+
+test("supporting evidence is described as redundant support rather than useless", () => {
+  const summary = summarizeCounterfactual({claims: [{original_support: "strong", evidence: [{evidence_id: "E1", status: "completed", support_after: "strong", importance: "Supporting"}]}]});
+  assert.equal(summary.claims[0].beforeLabel, summary.claims[0].comparisons[0].afterLabel);
+  assert.match(summary.claims[0].comparisons[0].meaning, /Other evidence may cover/);
+  assert.equal(summary.candidateClaims, null);
+  assert.equal(summary.maxClaims, null);
+});
+
+test("legacy counterfactual results load remaining evidence from saved call manifests", () => {
+  const result = {claims: [{claim_id: "upside", original_support: "strong", evidence: [{evidence_id: "E1", status: "completed", support_after: "moderate", importance: "Important"}]}]};
+  const report = {evidence: [{id: "E1", content: "Revenue grew 20%."}], llm: {calls: [
+    {node: "generate_thesis_graph", success: false},
+    {node: "counterfactual_evidence_test", claim_id: "upside", removed_evidence_id: "E1", input_manifest: {evidence_ids: ["E2", "E3"]}},
+  ]}};
+  const summary = summarizeCounterfactual(result, report);
+  assert.deepEqual(summary.claims[0].comparisons[0].remainingIds, ["E2", "E3"]);
+  assert.equal(summary.claims[0].comparisons[0].excerpt, "Revenue grew 20%.");
+  assert.match(summary.claims[0].comparisons[0].outcome, /qualifications/);
+  assert.equal(summary.thesisGenerationFallback, true);
+});
+
+test("an empty remaining bundle is kept distinct from missing evidence records", () => {
+  const result = {claims: [{evidence: [{evidence_id: "E1", remaining_evidence_ids: [], status: "completed", support_after: "unsupported"}, {evidence_id: "E2", status: "failed"}]}]};
+  const comparisons = summarizeCounterfactual(result).claims[0].comparisons;
+  assert.deepEqual(comparisons[0].remainingIds, []);
+  assert.equal(comparisons[1].remainingIds, null);
+});
+
+test("a critical change flag is not hidden by an unchanged support category", () => {
+  const result = {claims: [{original_support: "strong", evidence: [{status: "completed", support_after: "strong", importance: "Critical"}]}]};
+  assert.match(summarizeCounterfactual(result).claims[0].comparisons[0].outcome, /material change was flagged/);
+});
 
 test("API costs keep small dollar amounts visible and unknown costs explicit", () => {
   assert.equal(apiCostText(0.000503), "$0.000503");

@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText } from "./presentation.mjs?v=20261009-bedrock2";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual } from "./presentation.mjs?v=20261009-cfcompare1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -137,7 +137,7 @@ function updateCounterfactualChoiceStatus() {
   const selected = $("enableCounterfactualEvidenceTest").checked;
   const server = counterfactualSettings ? `Server default: ${counterfactualSettings.default_enabled ? "on" : "off"}. ` : "";
   $("counterfactualOptionStatus").textContent = selected
-    ? `${server}Enabled for this analysis. ${counterfactualSettings ? `Up to ${counterfactualSettings.max_added_model_calls} extra model calls within a ${counterfactualSettings.budget_seconds}s budget.` : "Adds model calls."} May time out when the model is busy.`
+    ? `${server}Enabled for this analysis. ${counterfactualSettings ? `Up to ${counterfactualSettings.max_claims} main conclusion(s), ${counterfactualSettings.max_evidence} evidence removals per conclusion, and ${counterfactualSettings.max_added_model_calls} extra model calls within ${counterfactualSettings.budget_seconds}s.` : "Adds model calls."}`
     : `${server}Off for this analysis; no extra counterfactual model calls.`;
 }
 
@@ -888,7 +888,7 @@ function renderReport(report, trace = [], { replay = false } = {}) {
     ? decisionBrief.watch_items.map((item, index) => `<article class="watch-item"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(item.signal || "Signal")}</strong><p>${escapeHtml(item.why_it_matters || "")}</p><small><b>Confirm:</b> ${escapeHtml(item.confirm_if || "--")}</small><small><b>Invalidate:</b> ${escapeHtml(item.invalidate_if || "--")}</small>${evidenceReferences(item.evidence_ids || [])}</div></article>`).join("")
     : '<div class="empty-evidence">No supported watch item survived verification.</div>';
   $("nextResearchAction").textContent = decisionBrief.next_research_action || "Collect the missing critical evidence before extending the conclusion.";
-  renderCounterfactual(report.counterfactual_evidence_test);
+  renderCounterfactual(report.counterfactual_evidence_test, report);
 
   const explanations = scores.explanation || {};
   $("scoreGrid").innerHTML = [
@@ -955,27 +955,33 @@ function runProgressMessage(run, fallback) {
     : run.message || fallback;
 }
 
-function renderCounterfactual(result) {
+function renderCounterfactual(result, report = {}) {
   const section = $("counterfactualContent");
   $("counterfactualSection").open = false;
-  const note = '<p class="field-hint">Checks whether an existing conclusion weakens when one supporting evidence item is removed. Qualitative judgments, not calibrated probabilities.</p>';
+  const note = '<p class="field-hint">We re-check the same saved conclusion after removing one evidence item at a time. All other supporting evidence stays. This checks evidence dependence; it does not generate a new conclusion or a probability.</p>';
   if (!result) {
     section.innerHTML = `${note}<p class="counterfactual-status">Not recorded for this report</p><p class="detail-copy">The test was disabled or this is an older report. Enable Counterfactual Evidence Test under advanced options for a new analysis.</p>`;
     return;
   }
   const timedOut = (result.errors || []).some(error => /timed out|timeout|budget exhausted/i.test(error));
   const labels = { completed: "Completed", partial: "Partially completed", skipped: "Not run", unavailable: timedOut ? "Timed out — no test result" : "Failed — no test result", running: "Running" };
-  const claims = (result.claims || []).map(claim => `<article class="prompt-card">
-    <p class="reason-title">Claim</p><strong>${escapeHtml(claim.claim)}</strong>
-    <ul class="clean-list">${(claim.evidence || []).map(item => `<li>
-      ${escapeHtml(item.title)} → <b>${escapeHtml(item.importance || "Not evaluated")}</b>
-      ${evidenceReferences([item.evidence_id])}
-    </li>`).join("")}</ul><p class="detail-copy">${escapeHtml(claim.explanation || "")}</p>
-    <details><summary>Support changes and reasons</summary><ul class="clean-list">${(claim.evidence || []).map(item => `<li>
-      ${escapeHtml(item.title)}: ${escapeHtml(claim.original_support || "unknown")} → ${escapeHtml(item.support_after || "not evaluated")}
-      (${escapeHtml(item.impact || "unknown")} impact). ${escapeHtml(item.reason || "")}
-    </li>`).join("")}</ul></details></article>`).join("");
+  const comparison = summarizeCounterfactual(result, report);
+  const scope = `${comparison.selectedClaims} conclusion${comparison.selectedClaims === 1 ? "" : "s"} selected${comparison.candidateClaims != null ? ` from ${comparison.candidateClaims} eligible candidates` : ""} · ${comparison.completedTests} evidence removals completed. ${comparison.maxClaims != null ? `Configured limit: ${comparison.maxClaims} conclusion${comparison.maxClaims === 1 ? "" : "s"}. ` : ""}This is a focused test, not an evaluation of every claim in the report.`;
+  const claims = comparison.claims.map((claim, index) => `<article class="prompt-card cf-claim">
+    <p class="reason-title">Conclusion ${index + 1} · Original conclusion (kept unchanged)</p><strong>${escapeHtml(claim.claim)}</strong>
+    <p class="cf-baseline">With all original supporting evidence: <b>${escapeHtml(claim.beforeLabel)}</b></p>
+    ${claim.comparisons.map(item => `<article class="cf-comparison">
+      <p class="reason-title">Remove only this evidence</p><strong>${escapeHtml(item.title || item.evidence_id)}</strong>${evidenceReferences([item.evidence_id])}
+      <dl class="cf-support-pair"><div><dt>With all supporting evidence</dt><dd>${escapeHtml(claim.beforeLabel)}</dd></div><div><dt>Without this evidence</dt><dd>${escapeHtml(item.afterLabel)}</dd></div></dl>
+      <p class="cf-outcome">${escapeHtml(item.outcome)}</p>
+      ${item.meaning ? `<p class="detail-copy"><b>${escapeHtml(item.importance)}</b> · ${escapeHtml(item.meaning.split(": ").slice(1).join(": "))}</p>` : ""}
+      <details><summary>Evidence details &amp; model reason</summary>${item.excerpt ? `<p class="detail-copy"><b>Removed evidence excerpt:</b> ${escapeHtml(item.excerpt)}</p>` : ""}<p class="detail-copy"><b>Reason:</b> ${escapeHtml(item.reason || "Not recorded")}</p>${item.remainingIds ? `<p class="detail-copy"><b>Remaining supporting evidence:</b> ${item.remainingIds.length ? evidenceReferences(item.remainingIds) : "None"}</p>` : ""}</details>
+    </article>`).join("")}
+    ${!claim.comparisons.length ? `<p class="detail-copy">${escapeHtml(claim.explanation || "No evidence removal was evaluated for this conclusion.")}</p>` : ""}
+  </article>`).join("");
   section.innerHTML = `${note}<p class="counterfactual-status" role="status">${escapeHtml(labels[result.status] || "Unknown status")}</p>
+    <p class="field-hint">${escapeHtml(scope)}</p>
+    ${comparison.thesisGenerationFallback ? '<p class="detail-copy">The report\'s thesis-generation step used a deterministic fallback. This test evaluates the saved report\'s conclusion.</p>' : ""}
     ${claims || `<p class="detail-copy">${timedOut ? "The model did not return a valid result within the time limit. Evidence importance was not assigned." : "No evidence importance result is available."}</p>`}
     ${(result.errors || []).length ? `<details><summary>Test errors</summary><p class="detail-copy">${escapeHtml(result.errors.join("; "))}</p></details>` : ""}`;
 }
