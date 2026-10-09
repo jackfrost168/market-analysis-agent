@@ -17,6 +17,21 @@ export function numericValue(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+export function supportBadgeText(scores = {}) {
+  const label = `${String(scores.quality_label || "unknown").toUpperCase()} SUPPORT`;
+  let score = numericValue(scores.composite_score);
+  if (score === null) {
+    const chain = numericValue(scores.chain_support_confidence);
+    const quality = numericValue(scores.evidence_quality);
+    const completeness = numericValue(scores.evidence_completeness);
+    const conflict = numericValue(scores.evidence_conflict);
+    if ([chain, quality, completeness, conflict].every(value => value !== null)) {
+      score = Math.max(0, Math.min(100, chain * 0.4 + quality * 0.3 + completeness * 0.3 - conflict * 0.15));
+    }
+  }
+  return score === null ? label : `${label} · ${score.toFixed(1)}/100`;
+}
+
 export function modelTokenUsage(call = {}) {
   if (call.usage?.usage_reported === false) return { input: null, output: null, total: null, measured: false };
   const input = numericValue(call.usage?.prompt_tokens);

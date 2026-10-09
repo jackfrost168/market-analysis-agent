@@ -101,5 +101,6 @@ class ScoreCard(BaseModel):
     evidence_quality: int = Field(ge=0, le=100)
     evidence_completeness: int = Field(ge=0, le=100)
     evidence_conflict: int = Field(ge=0, le=100)
+    composite_score: Optional[float] = Field(default=None, ge=0, le=100)
     quality_label: Literal["low", "guarded", "moderate", "strong"]
     explanation: Dict[str, str] = Field(default_factory=dict)

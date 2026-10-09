@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus } from "./presentation.mjs?v=20261009-cfrun1";
+import { DEMO_REQUESTS, numericValue, supportBadgeText, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus } from "./presentation.mjs?v=20261009-score1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -864,7 +864,7 @@ function renderReport(report, trace = [], { replay = false } = {}) {
   const evidence = report.evidence || [];
   $("reportContent").classList.remove("hidden");
   $("currentView").textContent = situation.view || "No current view generated.";
-  $("qualityBadge").textContent = `${String(scores.quality_label || "unknown").toUpperCase()} SUPPORT`;
+  $("qualityBadge").textContent = supportBadgeText(scores);
   $("reportProvenance").textContent = `${replay ? "Saved report" : "New run"} · Generated ${formatTimestamp(report.generated_at)} · ${report.run_id || "Run ID unavailable"}`;
   $("summaryAsset").textContent = task.asset_name || "--";
   $("summaryAssetMark").textContent = assetMonogram(task.asset_name, task.symbol);

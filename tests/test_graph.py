@@ -207,6 +207,10 @@ class GraphIntegrationTests(unittest.TestCase):
                 visited,
             )
             self.assertIn("observability", state["report"])
+            scores = state["report"]["confidence_scores"]
+            self.assertIsInstance(scores["composite_score"], float)
+            self.assertGreaterEqual(scores["composite_score"], 0)
+            self.assertLessEqual(scores["composite_score"], 100)
             self.assertEqual(state["report"]["observability"]["model_calls"]["total"], 3)
             self.assertTrue(state["report"]["decision_brief"]["watch_items"])
             reopened = AgentService(Path(directory), llm=OfflineLlm(), research_tools=FixtureResearchTools())

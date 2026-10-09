@@ -1518,6 +1518,7 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
         directional = positive_count + negative_count
         conflict = round(2 * min(positive_count, negative_count) / directional * 100) if directional else 0
         composite = chain_support * 0.4 + evidence_quality * 0.3 + completeness * 0.3 - conflict * 0.15
+        composite_score = round(max(0.0, min(100.0, composite)), 1)
         quality_label = "strong" if composite >= 78 else "moderate" if composite >= 58 else "guarded" if composite >= 38 else "low"
         conflicts = []
         if positive_count and negative_count:
@@ -1541,12 +1542,14 @@ Evidence bundle: {json.dumps(prompt_evidence, ensure_ascii=False)}
             "evidence_quality": max(0, min(100, evidence_quality)),
             "evidence_completeness": max(0, min(100, completeness)),
             "evidence_conflict": max(0, min(100, conflict)),
+            "composite_score": composite_score,
             "quality_label": quality_label,
             "explanation": {
                 "chain_support_confidence": "Share of thesis references that resolve to real evidence IDs, adjusted for evidence reliability.",
                 "evidence_quality": "Mean source reliability across normalized evidence.",
                 "evidence_completeness": "Coverage of task-specific critical evidence types.",
                 "evidence_conflict": "Directional disagreement; a higher value means more conflict, not better quality.",
+                "composite_score": "Weighted support score: 40% chain support, 30% evidence quality, 30% completeness, minus 15% evidence conflict.",
             },
         }
         verification = {

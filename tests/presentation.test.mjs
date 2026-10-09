@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { numericValue, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+import { numericValue, supportBadgeText, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+
+test("support badge shows the composite score and remains compatible with old reports", () => {
+  assert.equal(supportBadgeText({ quality_label: "moderate", composite_score: 70.2 }), "MODERATE SUPPORT · 70.2/100");
+  assert.equal(supportBadgeText({ quality_label: "moderate", chain_support_confidence: 72, evidence_quality: 78, evidence_completeness: 100, evidence_conflict: 80 }), "MODERATE SUPPORT · 70.2/100");
+  assert.equal(supportBadgeText({ quality_label: "strong" }), "STRONG SUPPORT");
+});
 
 test("counterfactual choice survives refresh and explicit opt-out overrides default on", () => {
   assert.equal(counterfactualChoice(null, true), true);
