@@ -127,6 +127,13 @@ def create_app(bridge: AgentBridge | None = None, evaluation_report: Path | None
             raise HTTPException(status_code=404, detail="Run not found")
         return result
 
+    @app.post("/api/runs/{run_id}/counterfactual")
+    def saved_counterfactual(run_id: str):
+        result = app.state.bridge.counterfactual_saved_report(run_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return result
+
     @app.get("/api/runs/{run_id}")
     def run(run_id: str) -> Dict[str, Any]:
         result = app.state.bridge.get_run(run_id)

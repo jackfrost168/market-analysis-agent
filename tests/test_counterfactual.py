@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import tempfile
+from unittest.mock import Mock
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -57,6 +58,33 @@ class ExampleLlm:
 
 
 class CounterfactualTests(unittest.TestCase):
+    def test_saved_report_test_reuses_thesis_and_evidence_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            llm = ExampleLlm()
+            service = AgentService(Path(directory), llm=llm)
+            state = example_state()
+            state["report"]["generated_at"] = "2026-09-01T00:00:00Z"
+            state["run_metrics"] = {"started_at": "original-start", "completed_at": "original-end", "total_duration_ms": 1000}
+            service.runs.save(state)
+            service.graph = Mock()
+            service.research_tools = Mock()
+            original = service.saved_run("cf-example")
+            updated = service.counterfactual_saved_report("cf-example")
+            self.assertEqual(updated["thesis_graph"], state["thesis_graph"])
+            self.assertEqual(updated["normalized_evidence"], state["normalized_evidence"])
+            self.assertEqual(updated["node_trace"], state["node_trace"])
+            self.assertEqual(updated["run_metrics"]["total_duration_ms"], 1000)
+            self.assertEqual(updated["run_metrics"]["completed_at"], "original-end")
+            self.assertTrue(updated["report"]["counterfactual_evidence_test"]["added_to_saved_report"])
+            self.assertEqual(len(llm.requests), 4)
+            self.assertEqual(updated["run_metrics"]["model_calls"]["total"], 4)
+            self.assertEqual(service.saved_run("cf-example")["created_at"], original["created_at"])
+            self.assertEqual(service.counterfactual_saved_report("cf-example")["report"], updated["report"])
+            self.assertEqual(len(llm.requests), 4)
+            service.graph.stream.assert_not_called()
+            service.research_tools.collect.assert_not_called()
+            self.assertIsNone(service.counterfactual_saved_report("missing"))
+
     def test_example_ablations_and_no_state_mutation_or_evidence_leak(self):
         state = example_state()
         original = copy.deepcopy(state)
@@ -236,6 +264,7 @@ class CounterfactualTests(unittest.TestCase):
             with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "true"}):
                 state = service.analyze({"enable_counterfactual_evidence_test": False})
                 self.assertNotIn("counterfactual_tests", state)
+                self.assertFalse(state["report"]["counterfactual_choice"]["enabled"])
                 self.assertEqual(state["llm_calls"], [])
             with patch.dict(os.environ, {"ENABLE_COUNTERFACTUAL_EVIDENCE_TEST": "false"}):
                 state = service.analyze({"enable_counterfactual_evidence_test": True})

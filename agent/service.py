@@ -2,6 +2,7 @@ import os
 import uuid
 import math
 import time
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -50,6 +51,7 @@ class AgentService:
         self.nodes = AgentNodes(self.llm, self.research_tools)
         self.graph = build_graph(self.nodes)
         self.runs = RunRepository(self.data_dir / "agent_runs.sqlite3")
+        self._saved_counterfactual_lock = threading.Lock()
 
     def _initial_state(self, payload: Dict[str, Any], run_id: str) -> Dict[str, Any]:
         if isinstance(self.llm, OllamaClient):
@@ -122,7 +124,10 @@ class AgentService:
             if progress_callback:
                 progress_callback(snapshot)
         # Optional post-analysis hook: leave all graph nodes, routes and the original thesis intact.
-        if counterfactual_enabled(payload.get("enable_counterfactual_evidence_test")) and final_state.get("report"):
+        cf_enabled = counterfactual_enabled(payload.get("enable_counterfactual_evidence_test"))
+        if final_state.get("report") and (cf_enabled or "enable_counterfactual_evidence_test" in payload):
+            final_state["report"]["counterfactual_choice"] = {"enabled": cf_enabled}
+        if cf_enabled and final_state.get("report"):
             final_state["counterfactual_tests"] = {"status": "running"}
             if progress_callback:
                 progress_callback(final_state)
@@ -162,6 +167,47 @@ class AgentService:
             progress_callback(final_state)
         self.runs.save(final_state)
         return final_state
+
+    def counterfactual_saved_report(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """Add only the bounded post-analysis test to a saved report; no graph/retrieval."""
+        with self._saved_counterfactual_lock:
+            saved = self.runs.get(run_id)
+            if saved is None:
+                return None
+            if saved.get("status") != "completed" or not saved.get("report"):
+                raise ValueError("A completed saved report is required")
+            state = saved["state"]
+            if saved["report"].get("counterfactual_evidence_test"):
+                return state  # Repeat requests reuse the recorded result; no extra model charges.
+            if not state.get("thesis_graph") or not state.get("normalized_evidence"):
+                raise ValueError("This report has no saved thesis/evidence bundle for testing")
+            model = state.get("model")
+            if not model or model == "auto":
+                model = next((call.get("model") for call in reversed(state.get("llm_calls") or []) if call.get("model")), None)
+            if isinstance(self.llm, OllamaClient):
+                self.llm.validate_request(model)
+            additional = run_counterfactual(self.llm, state)
+            state["counterfactual_tests"] = additional["counterfactual_tests"]
+            state["evidence_dependency"] = additional["evidence_dependency"]
+            state["llm_calls"] = list(state.get("llm_calls") or []) + additional["llm_calls"]
+            report = state["report"]
+            report["counterfactual_choice"] = {"enabled": True}
+            report["counterfactual_evidence_test"] = report_section(additional)
+            report["counterfactual_evidence_test"]["added_to_saved_report"] = True
+            report["llm"]["calls"] = state["llm_calls"]
+            original_metrics = state.get("run_metrics") or {}
+            metrics = build_run_metrics(state, started_at=original_metrics.get("started_at", ""),
+                                        completed_at=original_metrics.get("completed_at", ""),
+                                        total_duration_ms=original_metrics.get("total_duration_ms", 0))
+            # Keep original analysis runtime/timestamps. Record later test time separately.
+            metrics["post_analysis_duration_ms"] = additional["counterfactual_tests"]["latency_ms"]
+            metrics["post_analysis_completed_at"] = utc_now_iso()
+            if "total_duration_ms" not in original_metrics:
+                metrics.pop("total_duration_ms", None)
+            state["run_metrics"] = metrics
+            report["observability"] = metrics
+            self.runs.save(state)
+            return state
 
     def save_failed_run(
         self,

@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 
 from awsdeploy.api import create_app
 from awsdeploy.bridge import AgentBridge
+from agent.service import AgentService
+from test_counterfactual import ExampleLlm, example_state
 
 
 class FixtureService:
@@ -60,6 +62,20 @@ class FixtureService:
 
 
 class FastApiTests(unittest.TestCase):
+    def test_saved_counterfactual_endpoint_reuses_saved_run_and_handles_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            llm = ExampleLlm()
+            service = AgentService(Path(directory), llm=llm)
+            service.runs.save(example_state())
+            client = TestClient(create_app(AgentBridge(service)))
+            result = client.post("/api/runs/cf-example/counterfactual")
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["report"]["counterfactual_evidence_test"]["status"], "completed")
+            self.assertEqual(len(llm.requests), 4)
+            self.assertEqual(client.post("/api/runs/cf-example/counterfactual").status_code, 200)
+            self.assertEqual(len(llm.requests), 4)
+            self.assertEqual(client.post("/api/runs/missing/counterfactual").status_code, 404)
+
     def setUp(self):
         self.bridge = AgentBridge(FixtureService())
         self.client = TestClient(create_app(self.bridge))

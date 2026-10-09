@@ -1,4 +1,4 @@
-import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual } from "./presentation.mjs?v=20261009-cfcompare1";
+import { DEMO_REQUESTS, numericValue, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus } from "./presentation.mjs?v=20261009-cfrun1";
 
 const NODE_ORDER = [
   "understand_request",
@@ -65,7 +65,7 @@ function showRunMetrics(report, replay = false) {
   const evidence = report.evidence || [];
   $("runMetricsMeta").textContent = `${replay ? "Saved run" : "Just completed"} · ${formatTimestamp(report.generated_at)} · ${report.run_id || "Run ID unavailable"}`;
   $("runMetrics").innerHTML = [
-    metricCard("Runtime", elapsed == null ? null : elapsed / 1000, "seconds", "End-to-end analysis time"),
+    metricCard("Runtime", elapsed == null ? null : elapsed / 1000, "seconds", report.observability?.post_analysis_duration_ms != null ? `Original analysis; saved-report test added ${(report.observability.post_analysis_duration_ms / 1000).toFixed(1)}s separately` : "End-to-end analysis time"),
     metricCard("Model calls", usage.total, "calls", "Calls recorded for this run"),
     metricCard("Token usage", usage.total_tokens, "tokens", "Recorded model token usage"),
     metricCard("API cost estimate", usage.metered_api_cost_usd, "USD", `${apiCostText(usage.metered_api_cost_usd, usage.api_cost_unreported_calls)} · Usage × recorded rates; excludes credits and taxes.`),
@@ -132,6 +132,11 @@ let elapsedTimer = null;
 let historyLoading = false;
 let counterfactualSettings = null;
 let counterfactualChoiceEdited = false;
+const COUNTERFACTUAL_PREFERENCE_KEY = "marketAgentCounterfactualEnabled";
+
+function savedCounterfactualPreference() {
+  try { return localStorage.getItem(COUNTERFACTUAL_PREFERENCE_KEY); } catch (_) { return null; }
+}
 
 function updateCounterfactualChoiceStatus() {
   const selected = $("enableCounterfactualEvidenceTest").checked;
@@ -146,7 +151,7 @@ async function loadCounterfactualSettings() {
     const response = await fetch("/api/counterfactual/status", { cache: "no-store" });
     if (!response.ok) throw new Error("Counterfactual settings unavailable");
     counterfactualSettings = await response.json();
-    if (!counterfactualChoiceEdited && !isBusy) $("enableCounterfactualEvidenceTest").checked = counterfactualSettings.default_enabled === true;
+    if (!counterfactualChoiceEdited && !isBusy) $("enableCounterfactualEvidenceTest").checked = counterfactualChoice(savedCounterfactualPreference(), counterfactualSettings.default_enabled);
     updateCounterfactualChoiceStatus();
   } catch (_) {
     updateCounterfactualChoiceStatus();
@@ -960,7 +965,7 @@ function renderCounterfactual(result, report = {}) {
   $("counterfactualSection").open = false;
   const note = '<p class="field-hint">We re-check the same saved conclusion after removing one evidence item at a time. All other supporting evidence stays. This checks evidence dependence; it does not generate a new conclusion or a probability.</p>';
   if (!result) {
-    section.innerHTML = `${note}<p class="counterfactual-status">Not recorded for this report</p><p class="detail-copy">The test was disabled or this is an older report. Enable Counterfactual Evidence Test under advanced options for a new analysis.</p>`;
+    section.innerHTML = `${note}<p class="counterfactual-status">${escapeHtml(missingCounterfactualStatus(report))}</p><p class="detail-copy">Run the test using this report's saved conclusion and evidence. Adds up to 4 model calls using the report's model; no new retrieval or full analysis.</p>${report.run_id ? '<button class="ghost-button compact" type="button" data-action="run-saved-counterfactual">Run Counterfactual Test for This Report</button><p id="savedCounterfactualStatus" class="field-hint" role="status"></p>' : ""}`;
     return;
   }
   const timedOut = (result.errors || []).some(error => /timed out|timeout|budget exhausted/i.test(error));
@@ -980,10 +985,36 @@ function renderCounterfactual(result, report = {}) {
     ${!claim.comparisons.length ? `<p class="detail-copy">${escapeHtml(claim.explanation || "No evidence removal was evaluated for this conclusion.")}</p>` : ""}
   </article>`).join("");
   section.innerHTML = `${note}<p class="counterfactual-status" role="status">${escapeHtml(labels[result.status] || "Unknown status")}</p>
+    ${result.added_to_saved_report ? `<p class="field-hint">Test added to this saved report in ${((result.latency_ms || 0) / 1000).toFixed(1)}s. The original conclusion and evidence were reused.</p>` : ""}
     <p class="field-hint">${escapeHtml(scope)}</p>
     ${comparison.thesisGenerationFallback ? '<p class="detail-copy">The report\'s thesis-generation step used a deterministic fallback. This test evaluates the saved report\'s conclusion.</p>' : ""}
     ${claims || `<p class="detail-copy">${timedOut ? "The model did not return a valid result within the time limit. Evidence importance was not assigned." : "No evidence importance result is available."}</p>`}
     ${(result.errors || []).length ? `<details><summary>Test errors</summary><p class="detail-copy">${escapeHtml(result.errors.join("; "))}</p></details>` : ""}`;
+}
+
+async function runSavedCounterfactual(button) {
+  if (isBusy || !displayedReport?.report?.run_id) return;
+  const runId = displayedReport.report.run_id;
+  const replay = displayedReport.replay;
+  setBusy(true);
+  button.disabled = true;
+  button.textContent = "Testing saved evidence...";
+  $("savedCounterfactualStatus").textContent = "Checking the existing conclusion with one evidence item removed at a time...";
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/counterfactual`, {method: "POST"});
+    const run = await response.json();
+    if (!response.ok || !run.report) throw new Error(run.error || run.detail || "Counterfactual test failed");
+    renderReport(run.report, run.node_trace || [], {replay});
+    $("counterfactualSection").open = true;
+    $("analysisStateBanner").textContent = "Counterfactual test added to the saved report. The original analysis was reused.";
+    $("statusPill").textContent = "Report updated";
+  } catch (error) {
+    if ($("savedCounterfactualStatus")) $("savedCounterfactualStatus").textContent = error.message;
+    button.disabled = false;
+    button.textContent = "Run Counterfactual Test for This Report";
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function submitAnalysis(event) {
@@ -1001,7 +1032,7 @@ async function submitAnalysis(event) {
     horizon: $("horizon").value,
     query: $("query").value.trim(),
     model: $("llmModel").value,
-    enable_counterfactual_evidence_test: $("enableCounterfactualEvidenceTest").checked,
+    enable_counterfactual_evidence_test: counterfactualSettings || counterfactualChoiceEdited || savedCounterfactualPreference() != null ? $("enableCounterfactualEvidenceTest").checked : undefined,
     prediction_provider: $("predictionProvider").value,
     temperature: Number($("temperatureSlider").value) / 100,
     max_retries: Number($("maxRetries").value),
@@ -1146,10 +1177,16 @@ async function loadArchitecture() {
 }
 
 function bindEvents() {
-  $("enableCounterfactualEvidenceTest").addEventListener("change", () => { counterfactualChoiceEdited = true; updateCounterfactualChoiceStatus(); });
+  $("enableCounterfactualEvidenceTest").addEventListener("change", () => {
+    counterfactualChoiceEdited = true;
+    try { localStorage.setItem(COUNTERFACTUAL_PREFERENCE_KEY, String($("enableCounterfactualEvidenceTest").checked)); } catch (_) {}
+    updateCounterfactualChoiceStatus();
+  });
   $("reportContent").addEventListener("click", event => {
     const reference = event.target.closest("button[data-evidence-id]");
     if (reference) openReferencedEvidence(reference.dataset.evidenceId);
+    const counterfactualButton = event.target.closest('button[data-action="run-saved-counterfactual"]');
+    if (counterfactualButton) runSavedCounterfactual(counterfactualButton);
   });
   $("closeEvidenceDialog").addEventListener("click", () => $("evidenceDialog").close());
   $("evidenceDialog").addEventListener("click", event => {
@@ -1206,6 +1243,7 @@ function bindEvents() {
 document.addEventListener("DOMContentLoaded", () => {
   lastAutoQuery = $("query").value;
   queryWasEdited = true;
+  if (savedCounterfactualPreference() != null) $("enableCounterfactualEvidenceTest").checked = counterfactualChoice(savedCounterfactualPreference());
   bindEvents();
   loadModels();
   loadCounterfactualSettings();

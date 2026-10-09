@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { numericValue, modelTokenUsage, apiCostText, summarizeCounterfactual, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+import { numericValue, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification } from "../web/presentation.mjs";
+
+test("counterfactual choice survives refresh and explicit opt-out overrides default on", () => {
+  assert.equal(counterfactualChoice(null, true), true);
+  assert.equal(counterfactualChoice("false", true), false);
+  assert.equal(counterfactualChoice("true", false), true);
+  assert.equal(counterfactualChoice("invalid", true), true);
+  assert.equal(counterfactualChoice(null, false), false);
+});
+
+test("missing tests distinguish an explicit opt-out from unknown legacy state", () => {
+  assert.equal(missingCounterfactualStatus({counterfactual_choice:{enabled:false}}), "Disabled for this analysis");
+  assert.equal(missingCounterfactualStatus({counterfactual_choice:{enabled:true}}), "Enabled, but no result was saved");
+  assert.equal(missingCounterfactualStatus({}), "No test was saved with this report");
+});
 
 test("counterfactual compares the same conclusion and counts only completed removals", () => {
   const claim = "Revenue and margin improvement support the positive thesis.";

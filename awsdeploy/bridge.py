@@ -51,6 +51,10 @@ class AgentBridge:
         result.update(self.runs.stats())
         return result
 
+    def counterfactual_saved_report(self, run_id: str) -> Optional[Dict[str, Any]]:
+        state = self.service.counterfactual_saved_report(run_id)
+        return self.get_run(run_id) if state is not None else None
+
     def get_audit(self, run_id: str) -> Optional[Dict[str, Any]]:
         run = self.get_run(run_id)
         if not run:

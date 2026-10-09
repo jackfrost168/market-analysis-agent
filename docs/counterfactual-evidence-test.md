@@ -147,3 +147,20 @@ saved call manifests when available and leave unknown scope information absent.
 may cover the same conclusion. It does not mean the evidence is useless. Failed
 removals are explicitly unclassified. A thesis-generation fallback is disclosed
 so the reader knows the test evaluates the saved report's conclusion.
+
+## Saved reports and browser preference
+
+The browser remembers an explicit checkbox choice across refreshes. Without a
+saved choice, it uses the server's default. The AWS deployment now enables the
+test by default; users can switch it off. The library and `.env.example` retain
+their disabled default for existing local callers. Requests explicitly selecting
+the feature record `report.counterfactual_choice.enabled`, so disabled reports
+can be distinguished from legacy reports with no recorded selection.
+
+Reports without a saved result show **Run Counterfactual Test for This Report**.
+`POST /api/runs/{run_id}/counterfactual` loads the persisted thesis, evidence and
+original model, and calls only the bounded counterfactual module. It does not
+invoke LangGraph or retrieval. The result and additional model usage/cost are
+saved on the same report. The original creation time and analysis runtime are
+preserved; later test duration is recorded as `post_analysis_duration_ms`.
+Repeated requests reuse an existing result and do not add model charges.

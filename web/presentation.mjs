@@ -35,6 +35,18 @@ export function apiCostText(cost, unreported = 0) {
   return unreported ? `${text} + unknown cost (${unreported} calls)` : text;
 }
 
+export function counterfactualChoice(stored, serverDefault = false) {
+  if (stored === "true") return true;
+  if (stored === "false") return false;
+  return serverDefault === true;
+}
+
+export function missingCounterfactualStatus(report = {}) {
+  if (report.counterfactual_choice?.enabled === false) return "Disabled for this analysis";
+  if (report.counterfactual_choice?.enabled === true) return "Enabled, but no result was saved";
+  return "No test was saved with this report";
+}
+
 export function summarizeCounterfactual(result = {}, report = {}) {
   const supports = { strong: "Strong support", moderate: "Support with qualifications", weak: "Weak / incomplete support", unsupported: "Unsupported" };
   const dependencyMeaning = {
