@@ -285,38 +285,54 @@ def get_price_history(
         f"{YAHOO_CHART_URL.format(symbol=encoded)}?interval={urllib.parse.quote(interval)}"
         f"&range={urllib.parse.quote(range_value)}"
     )
+    metadata = {
+        "symbol": asset["symbol"],
+        "quote_symbol": asset["quote_symbol"],
+        "range": range_value,
+        "interval": interval,
+        "currency": None,
+        "exchange_timezone": None,
+        "price_basis": "daily_close" if interval == "1d" else "close",
+        "source": "finance.yahoo.chart",
+        "source_url": url,
+    }
     try:
         response, cache_hit = _fetch_json(url, ttl=120)
         result = (response["payload"].get("chart", {}).get("result") or [])[0]
+        meta = result.get("meta") or {}
+        metadata["currency"] = meta.get("currency") or None
+        metadata["exchange_timezone"] = meta.get("exchangeTimezoneName") or None
         timestamps = result.get("timestamp") or []
         quote = (result.get("indicators", {}).get("quote") or [{}])[0]
         closes = quote.get("close") or []
-        points = []
+        # Missing sessions stay missing; use Yahoo's close series, not adjclose or interpolation.
+        points_by_time = {}
         for timestamp, close in zip(timestamps, closes):
             value = _safe_float(close)
-            if timestamp and value is not None:
-                points.append({"time": int(timestamp), "price": value})
+            seconds = _safe_float(timestamp)
+            if value is None or value <= 0 or seconds is None or seconds <= 0:
+                continue
+            try:
+                datetime.fromtimestamp(seconds, tz=timezone.utc)
+            except (ValueError, OverflowError, OSError):
+                continue
+            points_by_time[int(seconds)] = value
+        points = [{"time": timestamp, "price": value} for timestamp, value in sorted(points_by_time.items())]
         if len(points) < 2:
             raise ValueError("Yahoo returned fewer than two history points")
         return {
+            **metadata,
             "success": True,
-            "symbol": asset["symbol"],
             "points": points,
-            "range": range_value,
-            "interval": interval,
-            "source": "finance.yahoo.chart",
-            "source_url": url,
             "retrieved_at": utc_now_iso(),
             "latency_ms": response["latency_ms"],
             "cache_hit": cache_hit,
         }
     except Exception as exc:
         return {
+            **metadata,
             "success": False,
-            "symbol": asset["symbol"],
             "points": [],
-            "source": "finance.yahoo.chart",
-            "source_url": url,
             "retrieved_at": utc_now_iso(),
             "error": str(exc),
         }

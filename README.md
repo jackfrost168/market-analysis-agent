@@ -45,6 +45,14 @@ Targets are positive finite amounts in the quote currency. The condition selecto
 
 For `server.py`, port `8001` is the default and `PORT` overrides it. For FastAPI, set the port with Uvicorn's `--port` option.
 
+### Price history preview
+
+Entering a company name or asset symbol loads a daily price chart below the latest quote, without starting research or calling an LLM. Switch between 1M, 3M, 6M (default), and 1Y; hover or focus the chart and use the arrow keys to inspect an observation. The chart shows the quote currency, data source, retrieval time, and change between its first and last available close. The latest daily bar may be incomplete; this is a price change, not a dividend-adjusted total return. Missing data is shown as unavailable.
+
+Both servers expose `GET /api/price-history?asset=AAPL&range=6mo`. Allowed ranges are `1mo`, `3mo`, `6mo`, and `1y`. It reuses the existing asset resolver and Yahoo history tool; it does not run the Agent graph or store a report.
+
+The independent **Sector relative performance** panel follows the selected chart range. `GET /api/sector-performance?asset=AAPL&range=6mo` matches the stock's exact Yahoo symbol and sourced sector classification to one of the [11 Select Sector SPDR ETFs](https://www.ssga.com/us/en/intermediary/capabilities/equities/sector-investing/select-sector-etfs). It compares stock and benchmark close-price returns on the same shared trading dates, excluding today's possibly incomplete bars. Difference is stock return minus ETF return, in percentage points. This is a weighted US sector ETF proxy, not the arithmetic average of every industry company or a dividend-adjusted total return. Crypto, non-US listings, missing classifications and failed data sources show unavailable rather than an invented benchmark. It uses no LLM or report persistence.
+
 ## Agent Graph
 
 The application uses a real `langgraph.graph.StateGraph` with 9 nodes and 12 graph edges:

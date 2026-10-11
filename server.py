@@ -105,6 +105,17 @@ class AppHandler(BaseHTTPRequestHandler):
                 question = (query.get("query") or [""])[0]
                 self._json(SERVICE.price_preview(asset, question))
                 return
+            if path == "/api/price-history":
+                asset = (query.get("asset") or [""])[0]
+                range_value = (query.get("range") or ["6mo"])[0]
+                question = (query.get("query") or [""])[0]
+                self._json(SERVICE.price_history_preview(asset, range_value, question))
+                return
+            if path == "/api/sector-performance":
+                asset = (query.get("asset") or [""])[0]
+                range_value = (query.get("range") or ["6mo"])[0]
+                self._json(SERVICE.sector_performance_preview(asset, range_value))
+                return
             if path == "/api/history":
                 limit = int((query.get("limit") or ["20"])[0])
                 self._json({"runs": SERVICE.history(limit)})

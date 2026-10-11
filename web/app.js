@@ -1,4 +1,7 @@
 import { DEMO_REQUESTS, numericValue, supportBadgeText, stageStates, summarizeExecution, summarizePolymarket, summarizeEvidenceGate, summarizeVerification, modelTokenUsage, apiCostText, summarizeCounterfactual, counterfactualChoice, missingCounterfactualStatus } from "./presentation.mjs?v=20261009-score1";
+import { createPriceChart } from "./price-chart.mjs?v=20261011-sector1";
+
+let priceChart;
 
 const NODE_ORDER = [
   "understand_request",
@@ -238,8 +241,15 @@ function setPriceLoading(message = "Fetching live price...") {
 
 async function fetchPrice(assetInput) {
   const asset = String(assetInput || "").trim();
-  if (!asset) return;
+  clearTimeout(priceTimer);
+  priceChart?.clear(asset ? "Resolving asset…" : undefined);
   if (priceController) priceController.abort();
+  if (!asset) {
+    priceController = null;
+    $("assetNameHint").textContent = "Enter a company or symbol.";
+    setPriceLoading("Enter a company or symbol");
+    return;
+  }
   priceController = new AbortController();
   const controller = priceController;
   setPriceLoading();
@@ -253,6 +263,7 @@ async function fetchPrice(assetInput) {
     const resolved = payload.asset || {};
     const price = payload.price || {};
     if (controller !== priceController || asset !== $("asset").value.trim()) return;
+    priceChart?.load(resolved);
     $("assetNameHint").textContent = `${resolved.asset_name || asset} · ${resolved.symbol || asset} · ${resolved.asset_type || "asset"}`;
     const display = $("currentPriceDisplay");
     if (price.success) {
@@ -285,6 +296,7 @@ async function fetchPrice(assetInput) {
   } catch (error) {
     if (error.name === "AbortError") return;
     if (controller !== priceController) return;
+    priceChart?.clear("Resolve a valid company or symbol to load its chart.");
     const display = $("currentPriceDisplay");
     display.className = "price-display is-error";
     display.innerHTML = `<div class="quote-card-head"><span class="quote-mark" aria-hidden="true">!</span><div class="quote-identity"><strong>Price lookup failed</strong><small>${escapeHtml(asset)}</small></div></div><div class="quote-card-error"><small>${escapeHtml(error.message)}</small></div>`;
@@ -294,6 +306,7 @@ async function fetchPrice(assetInput) {
 function schedulePriceFetch() {
   clearTimeout(priceTimer);
   if (priceController) priceController.abort();
+  priceChart?.clear("Waiting for symbol…");
   setPriceLoading("Waiting for symbol...");
   priceTimer = setTimeout(() => fetchPrice($("asset").value), 450);
 }
@@ -1241,6 +1254,7 @@ function bindEvents() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  priceChart = createPriceChart($("priceHistoryPreview"));
   lastAutoQuery = $("query").value;
   queryWasEdited = true;
   if (savedCounterfactualPreference() != null) $("enableCounterfactualEvidenceTest").checked = counterfactualChoice(savedCounterfactualPreference());

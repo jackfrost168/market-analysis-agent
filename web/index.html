@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20260930-4">
-  <link rel="stylesheet" href="/presentation.css?v=20261009-cfrun1">
+  <link rel="stylesheet" href="/presentation.css?v=20261011-sector1">
 </head>
 <body>
   <div class="page-shell">
@@ -50,6 +50,21 @@
             <div class="field"><span>Latest quote</span><div id="currentPriceDisplay" class="price-display is-loading" aria-live="polite"><strong>Fetching quote...</strong><small>Yahoo Finance</small></div></div>
             <label class="field target-field"><span>Target price <small>optional</small></span><input id="targetPrice" name="targetPrice" type="text" inputmode="decimal" placeholder="e.g. 120000"><small class="field-hint">Adds target-distance analysis and relevant Polymarket price markets.</small></label>
           </div>
+          <section id="priceHistoryPreview" class="price-chart-card" aria-label="Price history preview" aria-busy="false">
+            <div class="price-chart-header"><h3 data-chart-title>Price history</h3><div class="price-chart-ranges" role="group" aria-label="Price history range"><button type="button" data-chart-range="1mo" aria-pressed="false">1M</button><button type="button" data-chart-range="3mo" aria-pressed="false">3M</button><button type="button" data-chart-range="6mo" aria-pressed="true">6M</button><button type="button" data-chart-range="1y" aria-pressed="false">1Y</button></div></div>
+            <p data-chart-status role="status" class="field-hint">Loading daily prices…</p>
+            <div data-chart-content hidden><div class="price-chart-summary"><strong data-chart-readout></strong><span data-chart-change></span></div><div data-chart-plot class="price-chart-plot"></div><p data-chart-source class="field-hint"></p></div>
+            <section data-sector-panel class="sector-comparison" aria-label="Sector relative performance" aria-busy="false">
+              <h4>Sector relative performance</h4>
+              <p data-sector-status class="field-hint" role="status">Enter a stock to compare with its sector benchmark.</p>
+              <div data-sector-content hidden>
+                <p data-sector-identity class="field-hint"></p>
+                <div class="sector-metrics"><div><span data-sector-stock-label>Stock price return</span><strong data-sector-stock></strong></div><div><span data-sector-benchmark-label>Sector proxy</span><strong data-sector-benchmark></strong></div><div><span>Difference vs sector</span><strong data-sector-excess></strong><small data-sector-direction></small></div></div>
+                <p data-sector-dates class="field-hint"></p><p data-sector-note class="field-hint"></p><p class="field-hint"><a data-sector-benchmark-link target="_blank" rel="noopener noreferrer">Benchmark methodology</a></p><p data-sector-retrieved class="field-hint"></p>
+              </div>
+            </section>
+            <div class="price-chart-footer"><p class="field-hint">Available daily closes; the latest bar may be incomplete. Change excludes dividends. Hover or use arrow keys on the chart to inspect dates.</p><button type="button" data-chart-retry class="ghost-button compact">Refresh chart</button></div>
+          </section>
           <label class="field"><span>Target condition</span><select id="targetCondition"><option value="auto">Infer from question (default: at or above)</option><option value="above">At or above target</option><option value="below">At or below target</option></select><small class="field-hint">Current threshold satisfaction is not a guarantee of a future closing price.</small></label>
           <label class="field question-field"><span>Your question</span><textarea id="query" name="query" rows="3" required>Show Apple's six month price trend, volatility, and maximum drawdown.</textarea></label>
           <p id="predictionProviderHint" class="field-hint">Prediction data: CoinRithm aggregation, original venue Polymarket. This is not Gamma direct data.</p>
@@ -160,6 +175,6 @@
     <footer class="demo-footer">LangGraph orchestration · AWS Bedrock Converse / Ollama · SQLite vector memory · Observable tool calls</footer>
   </div>
   <dialog id="evidenceDialog" class="evidence-dialog" aria-labelledby="evidenceDialogTitle"><div class="evidence-dialog-heading"><h3 id="evidenceDialogTitle">Referenced evidence</h3><button id="closeEvidenceDialog" class="ghost-button compact" type="button" autofocus>Close</button></div><p class="field-hint">Inspect the source behind this reference. A valid ID does not by itself prove that the source supports the claim.</p><div id="evidenceDialogContent"></div></dialog>
-  <script type="module" src="/app.js?v=20261009-score1"></script>
+  <script type="module" src="/app.js?v=20261011-sector1"></script>
 </body>
 </html>

@@ -87,6 +87,14 @@ def create_app(bridge: AgentBridge | None = None, evaluation_report: Path | None
     def price(asset: str = "", query: str = "") -> Dict[str, Any]:
         return app.state.bridge.service.price_preview(asset, query)
 
+    @app.get("/api/price-history")
+    def price_history(asset: str = "", range: str = "6mo", query: str = "") -> Dict[str, Any]:
+        return app.state.bridge.service.price_history_preview(asset, range, query)
+
+    @app.get("/api/sector-performance")
+    def sector_performance(asset: str = "", range: str = "6mo") -> Dict[str, Any]:
+        return app.state.bridge.service.sector_performance_preview(asset, range)
+
     @app.get("/api/history")
     def history(limit: int = 20) -> Dict[str, Any]:
         return {"runs": app.state.bridge.service.history(limit)}

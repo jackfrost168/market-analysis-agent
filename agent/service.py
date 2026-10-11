@@ -12,9 +12,10 @@ from .llm import OllamaClient
 from .nodes import AgentNodes
 from .observability import aggregate_run_metrics, build_run_metrics
 from .repositories import RunRepository
-from .tools.market_data import get_price_snapshot, resolve_asset, utc_now_iso
+from .tools.market_data import get_price_history, get_price_snapshot, resolve_asset, utc_now_iso
 from .tools.prediction_markets import get_polymarket_status, select_provider
 from .tools.research import ResearchTools
+from .tools.sector_performance import get_sector_performance
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,6 +237,26 @@ class AgentService:
         asset = resolve_asset(asset_input, query)
         price = get_price_snapshot(asset)
         return {"asset": asset, "price": price, "retrieved_at": utc_now_iso()}
+
+    def price_history_preview(
+        self, asset_input: str, range_value: str = "6mo", query: str = ""
+    ) -> Dict[str, Any]:
+        """Fetch a bounded chart preview without starting an analysis or model call."""
+        if range_value not in {"1mo", "3mo", "6mo", "1y"}:
+            raise ValueError("Price history range must be 1mo, 3mo, 6mo, or 1y")
+        if not (asset_input or "").strip() and not (query or "").strip():
+            raise ValueError("An asset is required for price history")
+        asset = resolve_asset(asset_input, query)
+        history = get_price_history(asset, range_value=range_value, interval="1d")
+        return {"asset": asset, "history": history, "retrieved_at": utc_now_iso()}
+
+    def sector_performance_preview(self, asset_input: str, range_value: str = "6mo") -> Dict[str, Any]:
+        if range_value not in {"1mo", "3mo", "6mo", "1y"}:
+            raise ValueError("Sector comparison range must be 1mo, 3mo, 6mo, or 1y")
+        if not (asset_input or "").strip():
+            raise ValueError("An asset is required for sector comparison")
+        asset = resolve_asset(asset_input)
+        return {"asset": asset, "comparison": get_sector_performance(asset, range_value)}
 
     def ollama_models(self) -> Dict[str, Any]:
         try:
